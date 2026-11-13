@@ -10,6 +10,7 @@ import StudentProfile from '../models/StudentProfile.js';
 import JobPosting from '../models/JobPosting.js';
 import { chatJSON, isLLMConfigured } from './llm.js';
 import { scoreCandidate } from './matching.js';
+import { mentionsSkill } from './skills.js';
 
 const PROMPT_VERSION = 'v1'; // change this to invalidate every cached suggestion
 const RESUME_CHARS_FOR_AI = 6000; // keeps each request inside Groq's free per-minute token limit
@@ -143,8 +144,7 @@ export async function analyzeProfile(profileId) {
     });
 
     // Only trust AI-detected skills that literally appear in the resume text
-    const lowerResume = (profile.resumeText || '').toLowerCase();
-    const verified = cleanList(data.detectedSkills, 20).filter((s) => lowerResume.includes(s.toLowerCase()));
+    const verified = cleanList(data.detectedSkills, 20).filter((s) => mentionsSkill(profile.resumeText, s));
     if (verified.length) {
       const merged = new Map([...profile.extractedSkills, ...verified].map((s) => [s.toLowerCase(), s]));
       profile.extractedSkills = [...merged.values()];

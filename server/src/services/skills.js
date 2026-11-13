@@ -34,13 +34,29 @@ export function normalizeList(input, { max = 50 } = {}) {
 
 const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+/**
+ * True if `skill` is mentioned in `text` as a whole word.
+ * Single-letter languages (C, R) are only counted when written in capitals next to a
+ * word like "programming" or "language", so initials or "R." on a receipt don't count.
+ */
+export function mentionsSkill(text, skill) {
+  if (!text || !skill) return false;
+  const s = escape(skill);
+  if (skill.length === 1) {
+    const near = new RegExp(
+      `(^|[^A-Za-z0-9+#])${s}\\s*(programming|language|lang\\b)|(programming|languages?)[^.\\n]{0,40}(^|[^A-Za-z0-9+#])${s}($|[^A-Za-z0-9+#])`,
+      'i'
+    );
+    const exactCase = new RegExp(`(^|[^A-Za-z0-9+#])${s}($|[^A-Za-z0-9+#])`); // case-sensitive
+    return exactCase.test(text) && near.test(text);
+  }
+  return new RegExp(`(^|[^a-z0-9+#])${escape(skill.toLowerCase())}($|[^a-z0-9+#])`, 'i').test(text);
+}
+
 /** Finds known skills mentioned in free text (e.g. from resume). */
 export function extractSkillsFromText(text) {
   if (!text) return [];
-  return KNOWN_SKILLS.filter((skill) => {
-    const pattern = new RegExp(`(^|[^a-z0-9+#])${escape(skill.toLowerCase())}($|[^a-z0-9+#])`, 'i');
-    return pattern.test(text);
-  });
+  return KNOWN_SKILLS.filter((skill) => mentionsSkill(text, skill));
 }
 
 /** Extracts readable text from uploaded TXT, PDF, or DOCX files. */

@@ -1,0 +1,298 @@
+diff --git a/server/src/services/insights.js b/server/src/services/insights.js
+index 22744ed..370b871 100644
+--- a/server/src/services/insights.js
++++ b/server/src/services/insights.js
+@@ -10,6 +10,7 @@ import StudentProfile from '../models/StudentProfile.js';
+ import JobPosting from '../models/JobPosting.js';
+ import { chatJSON, isLLMConfigured } from './llm.js';
+ import { scoreCandidate } from './matching.js';
++import { mentionsSkill } from './skills.js';
+ 
+ const PROMPT_VERSION = 'v1'; // change this to invalidate every cached suggestion
+ const RESUME_CHARS_FOR_AI = 6000; // keeps each request inside Groq's free per-minute token limit
+@@ -143,8 +144,7 @@ export async function analyzeProfile(profileId) {
+     });
+ 
+     // Only trust AI-detected skills that literally appear in the resume text
+-    const lowerResume = (profile.resumeText || '').toLowerCase();
+-    const verified = cleanList(data.detectedSkills, 20).filter((s) => lowerResume.includes(s.toLowerCase()));
++    const verified = cleanList(data.detectedSkills, 20).filter((s) => mentionsSkill(profile.resumeText, s));
+     if (verified.length) {
+       const merged = new Map([...profile.extractedSkills, ...verified].map((s) => [s.toLowerCase(), s]));
+       profile.extractedSkills = [...merged.values()];
+diff --git a/server/src/services/skills.js b/server/src/services/skills.js
+index 510003e..cd83b2a 100644
+--- a/server/src/services/skills.js
++++ b/server/src/services/skills.js
+@@ -34,13 +34,29 @@ export function normalizeList(input, { max = 50 } = {}) {
+ 
+ const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+ 
++/**
++ * True if `skill` is mentioned in `text` as a whole word.
++ * Single-letter languages (C, R) are only counted when written in capitals next to a
++ * word like "programming" or "language", so initials or "R." on a receipt don't count.
++ */
++export function mentionsSkill(text, skill) {
++  if (!text || !skill) return false;
++  const s = escape(skill);
++  if (skill.length === 1) {
++    const near = new RegExp(
++      `(^|[^A-Za-z0-9+#])${s}\\s*(programming|language|lang\\b)|(programming|languages?)[^.\\n]{0,40}(^|[^A-Za-z0-9+#])${s}($|[^A-Za-z0-9+#])`,
++      'i'
++    );
++    const exactCase = new RegExp(`(^|[^A-Za-z0-9+#])${s}($|[^A-Za-z0-9+#])`); // case-sensitive
++    return exactCase.test(text) && near.test(text);
++  }
++  return new RegExp(`(^|[^a-z0-9+#])${escape(skill.toLowerCase())}($|[^a-z0-9+#])`, 'i').test(text);
++}
++
+ /** Finds known skills mentioned in free text (e.g. from resume). */
+ export function extractSkillsFromText(text) {
+   if (!text) return [];
+-  return KNOWN_SKILLS.filter((skill) => {
+-    const pattern = new RegExp(`(^|[^a-z0-9+#])${escape(skill.toLowerCase())}($|[^a-z0-9+#])`, 'i');
+-    return pattern.test(text);
+-  });
++  return KNOWN_SKILLS.filter((skill) => mentionsSkill(text, skill));
+ }
+ 
+ /** Extracts readable text from uploaded TXT, PDF, or DOCX files. */
+diff --git a/src/AiSuggestions.jsx b/src/AiSuggestions.jsx
+index 09d0491..b5c35be 100644
+--- a/src/AiSuggestions.jsx
++++ b/src/AiSuggestions.jsx
+@@ -7,6 +7,8 @@ function Tag({ children, tone = '' }) {
+ }
+ 
+ const FIT_TONE = { strong: 'matched', moderate: '', weak: 'missing' };
++const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 };
++const PRIORITY_TONE = { high: 'missing', medium: '', low: 'matched' };
+ 
+ /**
+  * Shows the student's AI career suggestions. They are stored in MongoDB, so opening the
+@@ -98,12 +100,18 @@ export default function AiSuggestions({ version = 0 }) {
+           </div>
+ 
+           <p className="eyebrow">NEXT STEPS</p>
++          <p className="priority-legend">
++            Priority shows how much each step should improve your chances for the roles currently posted:
++            <b> high</b> = do this first, <b>medium</b> = worth doing soon, <b>low</b> = nice to have.
++          </p>
+           <div className="suggestion-list">
+-            {(insights.suggestions || []).map(s => (
++            {[...(insights.suggestions || [])]
++              .sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 1) - (PRIORITY_ORDER[b.priority] ?? 1))
++              .map(s => (
+               <div className="suggestion" key={s.title}>
+                 <Lightbulb size={15} />
+                 <div>
+-                  <b>{s.title} <Tag tone={s.priority === 'high' ? 'missing' : ''}>{s.priority}</Tag></b>
++                  <b>{s.title} <Tag tone={PRIORITY_TONE[s.priority] || ''}>{s.priority} priority</Tag></b>
+                   <p>{s.detail}</p>
+                 </div>
+               </div>
+diff --git a/src/StudentDashboard.jsx b/src/StudentDashboard.jsx
+index 11a2730..a2f808f 100644
+--- a/src/StudentDashboard.jsx
++++ b/src/StudentDashboard.jsx
+@@ -4,6 +4,7 @@ import {
+ } from 'lucide-react';
+ import { api } from './api.js';
+ import AiSuggestions from './AiSuggestions.jsx';
++import TagInput from './TagInput.jsx';
+ import { usePolling } from './usePolling.js';
+ 
+ function Tag({ children, tone = '' }) {
+@@ -14,6 +15,8 @@ export function StudentDashboard({ jobs = [], user, onSelectJob }) {
+   const [name, setName] = useState(user?.name || '');
+   const [nameError, setNameError] = useState('');
+   const [linkedin, setLinkedin] = useState('');
++  const [skills, setSkills] = useState([]);
++  const [certifications, setCertifications] = useState([]);
+   const [projects, setProjects] = useState(['']);
+   const [resume, setResume] = useState(null);
+   const [extracted, setExtracted] = useState([]);
+@@ -40,6 +43,8 @@ export function StudentDashboard({ jobs = [], user, onSelectJob }) {
+         setLinkedin(profile.linkedin || '');
+         setCgpa(profile.cgpa != null ? String(profile.cgpa) : '');
+         setDepartment(profile.department || '');
++        setSkills(profile.skills || []);
++        setCertifications(profile.certifications || []);
+         if (profile.projects && profile.projects.length > 0) {
+           setProjects(profile.projects);
+         }
+@@ -136,6 +141,8 @@ export function StudentDashboard({ jobs = [], user, onSelectJob }) {
+         department: department.trim(),
+         linkedin: linkedin.trim(),
+         cgpa: parsedCgpa,
++        skills,
++        certifications,
+         projects: cleanProjects,
+       });
+ 
+@@ -144,6 +151,8 @@ export function StudentDashboard({ jobs = [], user, onSelectJob }) {
+         setLinkedin(profile.linkedin || '');
+         setCgpa(profile.cgpa != null ? String(profile.cgpa) : '');
+         setDepartment(profile.department || '');
++        setSkills(profile.skills || []);
++        setCertifications(profile.certifications || []);
+         if (profile.projects && profile.projects.length > 0) {
+           setProjects(profile.projects);
+         }
+@@ -312,6 +321,25 @@ export function StudentDashboard({ jobs = [], user, onSelectJob }) {
+             </label>
+           </div>
+ 
++          <TagInput
++            label="Skills"
++            values={skills}
++            onChange={(v) => { setSkills(v); setSaved(false); }}
++            placeholder="e.g. React, Python, SQL — press Enter after each"
++            hint="Add the technical skills you can show evidence for. Press Enter or comma after each one."
++            suggestions={extracted}
++            suggestionLabel="Found in your resume:"
++          />
++
++          <TagInput
++            label="Certifications"
++            values={certifications}
++            onChange={(v) => { setCertifications(v); setSaved(false); }}
++            placeholder="e.g. AWS Cloud Practitioner — press Enter after each"
++            hint="Include the issuer if helpful, e.g. “Google Data Analytics (Coursera)”."
++            max={20}
++          />
++
+           <div className="project-links-full">
+             <label>Project Links</label>
+             {projects.map((project, index) => (
+@@ -364,7 +392,17 @@ export function StudentDashboard({ jobs = [], user, onSelectJob }) {
+                 {extracted && extracted.length > 0 ? ` · detected: ${extracted.join(', ')}` : ''}
+               </small>
+             </span>
+-            <input type="file" accept=".pdf,.doc,.docx,.txt" onChange={handleResumeUpload} disabled={uploading} />
++            <span className="upload-btn">
++              {uploading ? 'Uploading…' : resumeDisplayName ? 'Replace file' : 'Choose file'}
++            </span>
++            {/* Native input is hidden: its "No file chosen" text contradicted the saved file name */}
++            <input
++              className="file-input-hidden"
++              type="file"
++              accept=".pdf,.doc,.docx,.txt"
++              onChange={handleResumeUpload}
++              disabled={uploading}
++            />
+           </label>
+           {uploadNotice && <p className="inline-success" style={{ marginTop: '8px' }}><CheckCircle2 size={14} /> {uploadNotice}</p>}
+           {saved && <p className="inline-success" style={{ marginTop: '8px' }}><CheckCircle2 size={14} /> Profile changes saved to database.</p>}
+diff --git a/src/TagInput.jsx b/src/TagInput.jsx
+new file mode 100644
+index 0000000..1df2c9e
+--- /dev/null
++++ b/src/TagInput.jsx
+@@ -0,0 +1,71 @@
++import React, { useState } from 'react';
++import { X, Plus } from 'lucide-react';
++
++/**
++ * Chip-style list input: type a value and press Enter (or a comma) to add it.
++ * Backspace on an empty box removes the last chip.
++ * `suggestions` are shown as one-click "+ Skill" chips (e.g. skills found in the resume).
++ */
++export default function TagInput({
++  label, values, onChange, placeholder, hint, suggestions = [], suggestionLabel, max = 30,
++}) {
++  const [draft, setDraft] = useState('');
++  const has = (v) => values.some((x) => x.toLowerCase() === v.toLowerCase());
++
++  const add = (raw) => {
++    const parts = String(raw).split(',').map((s) => s.trim().slice(0, 60)).filter(Boolean);
++    const next = [...values];
++    for (const p of parts) {
++      if (next.length >= max) break;
++      if (!next.some((x) => x.toLowerCase() === p.toLowerCase())) next.push(p);
++    }
++    if (next.length !== values.length) onChange(next);
++    setDraft('');
++  };
++
++  const remove = (v) => onChange(values.filter((x) => x !== v));
++
++  const onKeyDown = (e) => {
++    if (e.key === 'Enter' || e.key === ',') {
++      e.preventDefault();
++      if (draft.trim()) add(draft);
++    } else if (e.key === 'Backspace' && !draft && values.length) {
++      remove(values[values.length - 1]);
++    }
++  };
++
++  const open = suggestions.filter((s) => !has(s));
++
++  return (
++    <div className="tag-input-field">
++      <label>{label}</label>
++      <div className="tag-input-box" onClick={(e) => e.currentTarget.querySelector('input')?.focus()}>
++        {values.map((v) => (
++          <span className="chip" key={v}>
++            {v}
++            <button type="button" aria-label={`Remove ${v}`} onClick={() => remove(v)}><X size={12} /></button>
++          </span>
++        ))}
++        <input
++          value={draft}
++          placeholder={values.length ? '' : placeholder}
++          onChange={(e) => (e.target.value.includes(',') ? add(e.target.value) : setDraft(e.target.value))}
++          onKeyDown={onKeyDown}
++          onBlur={() => draft.trim() && add(draft)}
++          disabled={values.length >= max}
++        />
++      </div>
++      {hint && <small className="field-hint">{hint}</small>}
++      {open.length > 0 && (
++        <div className="chip-suggestions">
++          <small>{suggestionLabel}</small>
++          {open.map((s) => (
++            <button type="button" className="chip-suggest" key={s} onClick={() => add(s)}>
++              <Plus size={11} /> {s}
++            </button>
++          ))}
++        </div>
++      )}
++    </div>
++  );
++}
+diff --git a/src/styles.css b/src/styles.css
+index ca5ccc2..7b3cdbd 100644
+--- a/src/styles.css
++++ b/src/styles.css
+@@ -2307,3 +2307,29 @@ button:disabled { opacity: .6; cursor: not-allowed; }
+ /* ===== Live-update indicator (TPO dashboard) ===== */
+ .live-dot { width: 7px; height: 7px; border-radius: 50%; background: #39a06b; display: inline-block; animation: live-pulse 2s ease-in-out infinite; }
+ @keyframes live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
++
++/* ===== Skills & certifications chip inputs (student profile) ===== */
++.tag-input-field { margin-top: 18px; display: grid; gap: 7px; }
++.tag-input-field > label { font-size: 13px; font-weight: 700; color: #66516f; }
++.tag-input-box { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 48px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 14px; background: #fff; cursor: text; }
++.tag-input-box:focus-within { outline: 3px solid #c9a9da; outline-offset: 2px; }
++.tag-input-box input { flex: 1; min-width: 160px; border: 0; outline: 0; background: transparent; font-size: 14px; padding: 6px 4px; color: var(--ink); }
++.chip { display: inline-flex; align-items: center; gap: 5px; background: #efe5f3; color: #5d3474; border-radius: 20px; padding: 5px 6px 5px 11px; font-size: 12px; font-weight: 600; }
++.chip button { border: 0; background: #e2d1ea; color: #5d3474; border-radius: 50%; width: 18px; height: 18px; display: grid; place-items: center; padding: 0; }
++.chip button:hover { background: #d2b8de; }
++.chip-suggestions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
++.chip-suggestions small { font-size: 11px; color: var(--muted); }
++.chip-suggest { display: inline-flex; align-items: center; gap: 3px; border: 1px dashed #c7a9d3; background: #fcf9fd; color: var(--purple); border-radius: 20px; padding: 4px 10px; font-size: 11px; font-weight: 600; }
++.chip-suggest:hover { background: #f3e9f7; }
++
++/* ===== Resume upload: custom button instead of the browser's "No file chosen" ===== */
++.upload-zone { position: relative; }
++.upload-zone:focus-within { outline: 3px solid #c9a9da; outline-offset: 2px; }
++.upload-zone input[type="file"].file-input-hidden { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; clip: rect(0 0 0 0); margin: 0; padding: 0; }
++.upload-btn { margin-left: auto; flex: none; background: #512568; color: #fff; border-radius: 8px; padding: 12px 19px; font-size: 13px; font-weight: 600; transition: all .2s ease; }
++.upload-zone:hover .upload-btn { background: #704080; transform: translateY(-1px); box-shadow: 0 4px 10px rgba(81, 37, 104, .2); }
++@media (max-width: 560px) { .upload-btn { margin-left: 0; } }
++
++/* ===== AI suggestion priority legend ===== */
++.priority-legend { font-size: 11px; color: var(--muted); line-height: 1.5; margin: -2px 0 10px; }
++.priority-legend b { color: #5d3474; }

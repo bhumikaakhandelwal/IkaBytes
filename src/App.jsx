@@ -1,18 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Sparkles, GraduationCap, BriefcaseBusiness, ArrowRight, LogOut, Loader2
 } from 'lucide-react';
 import { api, tokenStore, ROLE_TO_API, ROLE_FROM_API } from './api.js';
 import StudentDashboard from './StudentDashboard.jsx';
 import TpoDashboard from './TpoDashboard.jsx';
-
-export const initialJobs = [
-  { id: 1, title: 'Frontend Engineer', company: 'Infosys', department: 'Computer Engineering', cgpaCutoff: '7.5', skills: ['React', 'CSS', 'JavaScript'], count: 2, status: 'Open', shortlisted: ['Aarav Sharma', 'Mira Naik'] },
-  { id: 2, title: 'Data Analyst', company: 'SignalWorks', department: 'Information Technology', cgpaCutoff: '7.0', skills: ['Python', 'SQL', 'Excel'], count: 1, status: 'Open', shortlisted: ['Aarav Sharma'] },
-  { id: 3, title: 'Backend Developer', company: 'TechNova', department: 'Computer Engineering', cgpaCutoff: '8.0', skills: ['Node.js', 'SQL', 'APIs'], count: 0, status: 'Open', shortlisted: [] },
-  { id: 4, title: 'Product Engineer', company: 'Orbit Systems', department: 'All Departments', cgpaCutoff: '7.5', skills: ['React', 'TypeScript', 'AWS'], count: 1, status: 'Closed', shortlisted: ['Mira Naik'] },
-  { id: 5, title: 'Cloud Associate', company: 'Northstar Labs', department: 'Computer Engineering', cgpaCutoff: '7.0', skills: ['AWS', 'Linux', 'Networking'], count: 0, status: 'Open', shortlisted: [] },
-];
 
 export function Brand() {
   return (
@@ -185,7 +177,23 @@ export function Header({ user, onLogout }) {
 export function App() {
   const [user, setUser] = useState(null);
   const [checking, setChecking] = useState(Boolean(tokenStore.get()));
-  const [jobs, setJobs] = useState(initialJobs);
+  const [jobs, setJobs] = useState([]);
+  const [jobsError, setJobsError] = useState('');
+
+  // Jobs come from MongoDB; both dashboards call reloadJobs after a change
+  const reloadJobs = useCallback(async () => {
+    try {
+      const { jobs: rows } = await api.listJobs('all');
+      setJobs(rows);
+      setJobsError('');
+    } catch (err) {
+      setJobsError(err.message || 'Could not load jobs');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (user) reloadJobs();
+  }, [user, reloadJobs]);
 
   useEffect(() => {
     if (!tokenStore.get()) {
@@ -201,6 +209,7 @@ export function App() {
   const handleLogout = () => {
     tokenStore.clear();
     setUser(null);
+    setJobs([]);
   };
 
   if (checking) {
@@ -218,10 +227,11 @@ export function App() {
   return (
     <div className="app-shell">
       <Header user={user} onLogout={handleLogout} />
+      {jobsError && <p className="form-error" style={{ textAlign: 'center', marginTop: '12px' }}>{jobsError}</p>}
       {isOfficer ? (
         <TpoDashboard
           jobs={jobs}
-          setJobs={setJobs}
+          reloadJobs={reloadJobs}
         />
       ) : (
         <StudentDashboard

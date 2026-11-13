@@ -1,21 +1,19 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Sparkles, Users, ChevronDown, ArrowRight, Plus, Search, Check,
-  Unlock, Lock, UserCheck, Download
+  Unlock, Lock, UserCheck, Download, Loader2, AlertTriangle
 } from 'lucide-react';
-
-export const students = [
-  { name: 'Aarav Sharma', dept: 'Computer Engineering', score: 94, skills: ['React', 'JavaScript', 'CSS', 'Git'], evidence: '2 projects · 1 certification', status: 'Strong match' },
-  { name: 'Mira Naik', dept: 'Information Technology', score: 88, skills: ['React', 'TypeScript', 'CSS'], evidence: '3 projects · 2 certifications', status: 'Strong match' },
-  { name: 'Rohan Patil', dept: 'Computer Engineering', score: 76, skills: ['JavaScript', 'HTML', 'Python'], evidence: '2 projects', status: 'Potential match' },
-  { name: 'Sana Khan', dept: 'Electronics', score: 63, skills: ['HTML', 'CSS', 'Python'], evidence: '1 project · 1 certification', status: 'Needs development' },
-];
+import { api } from './api.js';
 
 function Tag({ children, tone = '' }) {
   return <span className={`tag ${tone}`}>{children}</span>;
 }
 
-export function OfficerView({ jobs, setJobs, onSelectJob }) {
+function Loading({ label }) {
+  return <div className="empty-state"><Loader2 size={16} className="spin" /> {label}</div>;
+}
+
+export function OfficerView({ jobs, reloadJobs, onSelectJob }) {
   const [title, setTitle] = useState('');
   const [company, setCompany] = useState('');
   const [department, setDepartment] = useState('');
@@ -25,7 +23,23 @@ export function OfficerView({ jobs, setJobs, onSelectJob }) {
   const [skills, setSkills] = useState('');
   const [search, setSearch] = useState('');
   const [notice, setNotice] = useState('');
+  const [posting, setPosting] = useState(false);
   const [collapsedJobs, setCollapsedJobs] = useState({});
+  // Top-3 candidates per job, computed by the backend from real student profiles
+  const [shortlists, setShortlists] = useState(null);
+  const [totalStudents, setTotalStudents] = useState(0);
+
+  const loadShortlists = useCallback(async () => {
+    try {
+      const data = await api.shortlists(3);
+      setShortlists(data.shortlists || {});
+      setTotalStudents(data.totalStudents || 0);
+    } catch {
+      setShortlists({});
+    }
+  }, []);
+
+  useEffect(() => { loadShortlists(); }, [loadShortlists, jobs]);
 
   const handleCgpaCutoffChange = (e) => {
     const val = e.target.value;
@@ -34,35 +48,21 @@ export function OfficerView({ jobs, setJobs, onSelectJob }) {
       setCgpaError('');
       return;
     }
-
     const num = Number(val);
-    if (isNaN(num)) {
-      setCgpaError('Please enter a valid number');
-      return;
-    }
-
-    if (num > 10) {
-      setCgpaError('CGPA cannot exceed 10');
-      return;
-    }
-
-    if (num < 0) {
-      setCgpaError('CGPA cannot be negative');
-      return;
-    }
-
+    if (isNaN(num)) { setCgpaError('Please enter a valid number'); return; }
+    if (num > 10) { setCgpaError('CGPA cannot exceed 10'); return; }
+    if (num < 0) { setCgpaError('CGPA cannot be negative'); return; }
     setCgpaError('');
     setCgpaCutoff(val);
   };
 
-  const post = (e) => {
+  const post = async (e) => {
     e.preventDefault();
     const cleanSkills = skills.split(',').map(s => s.trim()).filter(Boolean);
     if (!title.trim() || !company.trim() || cleanSkills.length === 0) {
       setNotice('Add a role title, company and at least one required skill.');
       return;
     }
-
     if (cgpaCutoff !== '') {
       const num = Number(cgpaCutoff);
       if (isNaN(num) || num < 0 || num > 10) {
@@ -71,30 +71,34 @@ export function OfficerView({ jobs, setJobs, onSelectJob }) {
       }
     }
 
-    const job = {
-      id: Date.now(),
-      title: title.trim(),
-      company: company.trim(),
-      department: department.trim() || 'All Departments',
-      cgpaCutoff: cgpaCutoff ? parseFloat(cgpaCutoff).toFixed(1) : '',
-      description: description.trim(),
-      skills: cleanSkills,
-      count: 0,
-      status: 'Open',
-      shortlisted: []
-    };
-    setJobs([job, ...jobs]);
-    setTitle('');
-    setCompany('');
-    setDepartment('');
-    setCgpaCutoff('');
-    setCgpaError('');
-    setDescription('');
-    setSkills('');
-    setNotice('Role added to the live shortlist.');
+    setPosting(true);
+    try {
+      await api.createJob({
+        title: title.trim(),
+        company: company.trim(),
+        department: department.trim() || 'All Departments',
+        cgpaCutoff: cgpaCutoff === '' ? null : Number(cgpaCutoff),
+        description: description.trim(),
+        skills: cleanSkills,
+      });
+      setTitle('');
+      setCompany('');
+      setDepartment('');
+      setCgpaCutoff('');
+      setCgpaError('');
+      setDescription('');
+      setSkills('');
+      setNotice('Role added to the live shortlist.');
+      await reloadJobs();
+    } catch (err) {
+      setNotice(err.message || 'Could not post the role.');
+    } finally {
+      setPosting(false);
+    }
   };
 
   const visible = jobs.filter(j => `${j.title} ${j.company} ${j.department || ''}`.toLowerCase().includes(search.toLowerCase()));
+  const openCount = jobs.filter(j => j.status !== 'Closed').length;
 
   return (
     <div className="workspace officer-workspace">
@@ -105,7 +109,7 @@ export function OfficerView({ jobs, setJobs, onSelectJob }) {
           <p className="muted">Upload job requirements and shortlist candidates ranked by skill match.</p>
         </div>
         <Tag>
-          <Users size={14} />{jobs.length} active roles
+          <Users size={14} />{openCount} active roles · {totalStudents} student profiles
         </Tag>
       </div>
 
@@ -133,10 +137,7 @@ export function OfficerView({ jobs, setJobs, onSelectJob }) {
             />
             <select
               value={department}
-              onChange={e => {
-                setDepartment(e.target.value);
-                setNotice('');
-              }}
+              onChange={e => { setDepartment(e.target.value); setNotice(''); }}
               className={!department ? 'is-placeholder' : ''}
               required
             >
@@ -145,6 +146,7 @@ export function OfficerView({ jobs, setJobs, onSelectJob }) {
               <option value="Computer Engineering">Computer Engineering</option>
               <option value="Information Technology">Information Technology</option>
               <option value="Electronics and Computer Science Engineering">Electronics and Computer Science Engineering</option>
+              <option value="Electronics">Electronics</option>
               <option value="Mechanical Engineering">Mechanical Engineering</option>
               <option value="Civil Engineering">Civil Engineering</option>
             </select>
@@ -176,7 +178,9 @@ export function OfficerView({ jobs, setJobs, onSelectJob }) {
               onChange={e => { setSkills(e.target.value); setNotice(''); }}
               required
             />
-            <button className="primary-btn full" type="submit">Post role <ArrowRight size={16} /></button>
+            <button className="primary-btn full" type="submit" disabled={posting}>
+              {posting ? 'Posting…' : 'Post role'} <ArrowRight size={16} />
+            </button>
             {notice && <p className={notice.startsWith('Role') ? 'inline-success' : 'form-error'}>{notice}</p>}
           </form>
         </section>
@@ -185,9 +189,9 @@ export function OfficerView({ jobs, setJobs, onSelectJob }) {
           <div className="section-heading compact">
             <div>
               <h2>Live shortlists</h2>
-              <p className="muted">AI reads profiles against each job brief.</p>
+              <p className="muted">Student profiles ranked against each job brief.</p>
             </div>
-            <span className="ai-label"><Sparkles size={13} /> AI-assisted demo</span>
+            <span className="ai-label"><Sparkles size={13} /> Skill-match ranking</span>
           </div>
 
           <div className="search-box shortlist-search">
@@ -195,25 +199,26 @@ export function OfficerView({ jobs, setJobs, onSelectJob }) {
             <input placeholder="Search posted roles" value={search} onChange={e => setSearch(e.target.value)} />
           </div>
 
+          {jobs.length === 0 && <div className="empty-state">No roles posted yet. Use the form to post your first role.</div>}
+          {jobs.length > 0 && visible.length === 0 && <div className="empty-state">No roles match that search.</div>}
+
           {visible.map(job => {
             const isClosed = job.status === 'Closed';
+            const top = shortlists?.[job.id] || [];
             return (
               <article className={`shortlist-card ${isClosed ? 'is-closed' : ''}`} key={job.id}>
                 <button
                   className="shortlist-open"
-                  onClick={() => {
-                    setCollapsedJobs(current => ({
-                      ...current,
-                      [job.id]: !current[job.id]
-                    }));
-                  }}
+                  onClick={() => setCollapsedJobs(current => ({ ...current, [job.id]: !current[job.id] }))}
                 >
                   <span>
                     <b>{job.title}</b>
-                    <Tag tone="success">OPEN</Tag>
-                    <small>{job.company} · {job.skills.join(' · ')}</small>
+                    <Tag tone={isClosed ? 'danger' : 'success'}>{isClosed ? 'CLOSED' : 'OPEN'}</Tag>
+                    <small>
+                      {job.company} · {job.skills.join(' · ')}
+                      {job.shortlistedCount ? ` · ${job.shortlistedCount} shortlisted` : ''}
+                    </small>
                   </span>
-
                   <ChevronDown
                     size={20}
                     className={collapsedJobs[job.id] ? 'chevron-collapsed' : 'chevron-expanded'}
@@ -222,28 +227,31 @@ export function OfficerView({ jobs, setJobs, onSelectJob }) {
                 {!collapsedJobs[job.id] && (
                   <div className="shortlist-preview">
                     <div className="preview-label">
-                      <Sparkles size={13} /> AI resume parsing
+                      <Sparkles size={13} /> Top matches
                     </div>
-                    {students.slice(0, 3).map((s, i) => {
-                      const isShortlisted = (job.shortlisted || []).includes(s.name);
-                      return (
-                        <div className="candidate-mini" key={s.name}>
-                          <span className="rank">{i + 1}</span>
-                          <div className="candidate-info">
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <b>{s.name}</b>
-                              {isShortlisted && (
-                                <span className="mini-shortlist-badge">
-                                  <Check size={10} /> Shortlisted
-                                </span>
-                              )}
-                            </div>
-                            <small>{s.status} · {s.evidence}</small>
+                    {shortlists === null && <Loading label="Ranking students…" />}
+                    {shortlists !== null && top.length === 0 && (
+                      <p className="muted" style={{ fontSize: '11px', margin: '6px 0' }}>
+                        No student profiles list these skills yet.
+                      </p>
+                    )}
+                    {top.map(s => (
+                      <div className="candidate-mini" key={s.id}>
+                        <span className="rank">{s.rank}</span>
+                        <div className="candidate-info">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <b>{s.name}</b>
+                            {s.shortlisted && (
+                              <span className="mini-shortlist-badge">
+                                <Check size={10} /> Shortlisted
+                              </span>
+                            )}
                           </div>
-                          <strong>{Math.max(0, s.score - Math.max(0, job.skills.length - 3) * 4)}%</strong>
+                          <small>{s.status} · {s.evidence}</small>
                         </div>
-                      );
-                    })}
+                        <strong>{s.score}%</strong>
+                      </div>
+                    ))}
                     <button className="view-all" onClick={() => onSelectJob(job)}>
                       View full shortlist & candidate ranking <ArrowRight size={14} />
                     </button>
@@ -258,40 +266,61 @@ export function OfficerView({ jobs, setJobs, onSelectJob }) {
   );
 }
 
-export function Leaderboard({ job, onBack, onUpdateJob }) {
+export function Leaderboard({ job: initialJob, onBack, onJobChanged }) {
   const [viewTab, setViewTab] = useState('all');
-  const ranked = useMemo(() => students.map(s => ({
-    ...s,
-    score: Math.max(0, Math.round(s.score - Math.max(0, job.skills.length - 3) * 3))
-  })).sort((a, b) => b.score - a.score), [job]);
+  const [job, setJob] = useState(initialJob);
+  const [candidates, setCandidates] = useState(null);
+  const [total, setTotal] = useState(0);
+  const [error, setError] = useState('');
+  const [busyId, setBusyId] = useState(null);
+  const [statusBusy, setStatusBusy] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    api.leaderboard(initialJob.id)
+      .then(data => {
+        if (!active) return;
+        setJob(data.job);
+        setCandidates(data.candidates);
+        setTotal(data.total);
+      })
+      .catch(err => active && setError(err.message));
+    return () => { active = false; };
+  }, [initialJob.id]);
 
   const isClosed = job.status === 'Closed';
-  const shortlistedNames = job.shortlisted || [];
+  const shortlistedCount = (candidates || []).filter(c => c.shortlisted).length;
 
-  const toggleShortlist = (studentName) => {
-    const isAlreadyShortlisted = shortlistedNames.includes(studentName);
-    const nextShortlisted = isAlreadyShortlisted
-      ? shortlistedNames.filter(name => name !== studentName)
-      : [...shortlistedNames, studentName];
-
-    onUpdateJob({
-      ...job,
-      shortlisted: nextShortlisted,
-      count: nextShortlisted.length
-    });
+  const toggleShortlist = async (candidate) => {
+    setBusyId(candidate.id);
+    setError('');
+    try {
+      const { job: updated, shortlisted } = await api.toggleShortlist(job.id, candidate.id);
+      setJob(updated);
+      setCandidates(list => list.map(c => (c.id === candidate.id ? { ...c, shortlisted } : c)));
+      onJobChanged?.();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusyId(null);
+    }
   };
 
-  const toggleRoleStatus = () => {
-    const nextStatus = isClosed ? 'Open' : 'Closed';
-    onUpdateJob({
-      ...job,
-      status: nextStatus
-    });
+  const toggleRoleStatus = async () => {
+    setStatusBusy(true);
+    setError('');
+    try {
+      const { job: updated } = await api.updateJob(job.id, { status: isClosed ? 'Open' : 'Closed' });
+      setJob(updated);
+      onJobChanged?.();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setStatusBusy(false);
+    }
   };
 
-  const displayedCandidates = viewTab === 'shortlisted'
-    ? ranked.filter(s => shortlistedNames.includes(s.name))
-    : ranked;
+  const displayedCandidates = (candidates || []).filter(c => viewTab === 'all' || c.shortlisted);
 
   return (
     <div className="workspace leaderboard-workspace">
@@ -300,7 +329,7 @@ export function Leaderboard({ job, onBack, onUpdateJob }) {
         <div>
           <p className="eyebrow">JOB-SPECIFIC LEADERBOARD</p>
           <h1>{job.title} at <em>{job.company}</em></h1>
-          <p className="muted">Candidate ranking based on required-skill overlap and profile evidence.</p>
+          <p className="muted">Candidate ranking based on required-skill overlap, profile evidence, CGPA and department.</p>
         </div>
         <div className="role-actions-head">
           <Tag tone={isClosed ? 'danger' : 'success'}>
@@ -310,17 +339,10 @@ export function Leaderboard({ job, onBack, onUpdateJob }) {
             type="button"
             className={`toggle-role-btn ${isClosed ? 'reopen' : 'close'}`}
             onClick={toggleRoleStatus}
+            disabled={statusBusy}
             title={isClosed ? 'Reopen this role for applications' : 'Mark this role as filled / closed'}
           >
-            {isClosed ? (
-              <>
-                <Unlock size={14} /> Reopen Role
-              </>
-            ) : (
-              <>
-                <Lock size={14} /> Close Role (Filled)
-              </>
-            )}
+            {isClosed ? <><Unlock size={14} /> Reopen Role</> : <><Lock size={14} /> Close Role (Filled)</>}
           </button>
         </div>
       </div>
@@ -330,7 +352,7 @@ export function Leaderboard({ job, onBack, onUpdateJob }) {
           <div>
             <h2>Candidate leaderboard</h2>
             <p className="muted">
-              {ranked.length} candidates evaluated · Required: {job.skills.join(', ')}
+              {candidates ? `${total} candidates evaluated` : 'Evaluating candidates…'} · Required: {job.skills.join(', ')}
               {job.department ? ` · Dept: ${job.department}` : ''}
               {job.cgpaCutoff ? ` · Min CGPA: ${job.cgpaCutoff}` : ''}
             </p>
@@ -348,7 +370,7 @@ export function Leaderboard({ job, onBack, onUpdateJob }) {
               onClick={() => setViewTab('all')}
             >
               <Users size={14} />
-              All Candidates ({ranked.length})
+              All Candidates ({candidates ? candidates.length : 0})
             </button>
             <button
               type="button"
@@ -356,127 +378,87 @@ export function Leaderboard({ job, onBack, onUpdateJob }) {
               onClick={() => setViewTab('shortlisted')}
             >
               <UserCheck size={14} />
-              Shortlisted ({shortlistedNames.length})
+              Shortlisted ({shortlistedCount})
             </button>
           </div>
         </div>
 
-        {displayedCandidates.length === 0 ? (
+        {error && <p className="form-error">{error}</p>}
+        {!candidates && !error && <Loading label="Ranking candidates…" />}
+
+        {candidates && displayedCandidates.length === 0 && (
           <div className="empty-state">
             {viewTab === 'shortlisted'
               ? 'No candidates shortlisted yet for this role. Switch to "All Candidates" to shortlist students using the button.'
-              : 'No candidates found.'}
+              : 'No student profiles list these skills yet.'}
           </div>
-        ) : (
-          displayedCandidates.map((s, i) => {
-            const isShortlisted = shortlistedNames.includes(s.name);
-            return (
-              <article className="candidate-row" key={s.name}>
-                <span className="rank large">{i + 1}</span>
-                <div className="candidate-info">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                    <b>{s.name}</b>
-                    {isShortlisted && (
-                      <span className="mini-shortlist-badge">
-                        <UserCheck size={11} /> Shortlisted
-                      </span>
-                    )}
-                  </div>
-                  <small>{s.dept} · {s.evidence}</small>
-                  <div className="tags">
-                    {s.skills.map(skill => (
-                      <Tag
-                        key={skill}
-                        tone={job.skills.some(r => r.toLowerCase() === skill.toLowerCase()) ? 'matched' : 'missing'}
-                      >
-                        {skill}
-                      </Tag>
-                    ))}
-                  </div>
-                </div>
-                <div className="score-block">
-                  <strong>{s.score}%</strong>
-                  <small>MATCH SCORE</small>
-                </div>
-                <div className="candidate-reason">
-                  <b>Why this match</b>
-                  <p>
-                    {s.skills.filter(skill => job.skills.some(r => r.toLowerCase() === skill.toLowerCase())).length} matching listed skills. Review project evidence and eligibility before shortlisting.
-                  </p>
-                </div>
-                <div className="candidate-action">
-                  <button
-                    type="button"
-                    className={`shortlist-action-btn ${isShortlisted ? 'is-shortlisted' : ''}`}
-                    onClick={() => toggleShortlist(s.name)}
-                    title={isShortlisted ? 'Click to remove from shortlist' : 'Click to shortlist student'}
-                  >
-                    {isShortlisted ? (
-                      <>
-                        <Check size={14} /> Shortlisted
-                      </>
-                    ) : (
-                      <>
-                        <Plus size={14} /> Shortlist
-                      </>
-                    )}
-                  </button>
-                </div>
-              </article>
-            );
-          })
         )}
+
+        {displayedCandidates.map(s => (
+          <article className="candidate-row" key={s.id}>
+            <span className="rank large">{s.rank}</span>
+            <div className="candidate-info">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                <b>{s.name}</b>
+                {s.shortlisted && (
+                  <span className="mini-shortlist-badge">
+                    <UserCheck size={11} /> Shortlisted
+                  </span>
+                )}
+                {s.eligible === false && (
+                  <Tag tone="danger"><AlertTriangle size={11} /> Not eligible</Tag>
+                )}
+              </div>
+              <small>
+                {[s.department, s.evidence, s.cgpa != null ? `CGPA ${s.cgpa}` : null].filter(Boolean).join(' · ')}
+              </small>
+              <div className="tags">
+                {job.skills.map(skill => (
+                  <Tag key={skill} tone={s.matched.includes(skill) ? 'matched' : 'missing'}>{skill}</Tag>
+                ))}
+              </div>
+            </div>
+            <div className="score-block">
+              <strong>{s.score}%</strong>
+              <small>MATCH SCORE</small>
+            </div>
+            <div className="candidate-reason">
+              <b>{s.status}</b>
+              <p>{s.reason}</p>
+            </div>
+            <div className="candidate-action">
+              <button
+                type="button"
+                className={`shortlist-action-btn ${s.shortlisted ? 'is-shortlisted' : ''}`}
+                onClick={() => toggleShortlist(s)}
+                disabled={busyId === s.id}
+                title={s.shortlisted ? 'Click to remove from shortlist' : 'Click to shortlist student'}
+              >
+                {s.shortlisted ? <><Check size={14} /> Shortlisted</> : <><Plus size={14} /> Shortlist</>}
+              </button>
+            </div>
+          </article>
+        ))}
+        <p className="disclaimer">Scores are a starting point. CGPA is self-reported. Review project evidence before shortlisting.</p>
       </section>
     </div>
   );
 }
 
-export function TpoDashboard({
-  jobs = [],
-  setJobs,
-  selectedJob,
-  setSelectedJob,
-  onSelectJob,
-  onUpdateJob
-}) {
-  const [internalSelectedId, setInternalSelectedId] = useState(null);
+export function TpoDashboard({ jobs = [], reloadJobs }) {
+  const [selectedJob, setSelectedJob] = useState(null);
 
-  // If parent controls selectedJob, use it; otherwise manage internally
-  const currentSelected = selectedJob !== undefined
-    ? selectedJob
-    : (internalSelectedId ? jobs.find(j => j.id === internalSelectedId) || null : null);
-
-  const handleSelect = (job) => {
-    if (onSelectJob) onSelectJob(job);
-    if (setSelectedJob) setSelectedJob(job);
-    setInternalSelectedId(job ? job.id : null);
-  };
-
-  const handleUpdate = (updatedJob) => {
-    if (onUpdateJob) {
-      onUpdateJob(updatedJob);
-    } else if (setJobs) {
-      setJobs(prevJobs => prevJobs.map(j => j.id === updatedJob.id ? updatedJob : j));
-    }
-  };
-
-  if (currentSelected) {
+  if (selectedJob) {
     return (
       <Leaderboard
-        job={currentSelected}
-        onBack={() => handleSelect(null)}
-        onUpdateJob={handleUpdate}
+        job={selectedJob}
+        onBack={() => setSelectedJob(null)}
+        onJobChanged={reloadJobs}
       />
     );
   }
 
-  return (
-    <OfficerView
-      jobs={jobs}
-      setJobs={setJobs}
-      onSelectJob={handleSelect}
-    />
-  );
+  return <OfficerView jobs={jobs} reloadJobs={reloadJobs} onSelectJob={setSelectedJob} />;
 }
 
 export default TpoDashboard;

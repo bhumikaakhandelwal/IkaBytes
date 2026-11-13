@@ -3,15 +3,7 @@ import {
   CheckCircle2, X, Plus, Upload, ChartNoAxesColumn, Search, FileText, Lock
 } from 'lucide-react';
 import { api } from './api.js';
-
-const initialDemand = [
-  ['React', 5],
-  ['Python', 4],
-  ['SQL', 3],
-  ['TypeScript', 2],
-  ['AWS', 2],
-  ['JavaScript', 1]
-];
+import AiSuggestions from './AiSuggestions.jsx';
 
 function Tag({ children, tone = '' }) {
   return <span className={`tag ${tone}`}>{children}</span>;
@@ -34,7 +26,9 @@ export function StudentDashboard({ jobs = [], user, onSelectJob }) {
   const [cgpa, setCgpa] = useState('');
   const [cgpaError, setCgpaError] = useState('');
   const [department, setDepartment] = useState('');
-  const [demandList, setDemandList] = useState(initialDemand);
+  const [demandList, setDemandList] = useState([]);
+  // Bumped after a save or upload so the AI panel shows the new analysis status
+  const [aiVersion, setAiVersion] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -57,7 +51,7 @@ export function StudentDashboard({ jobs = [], user, onSelectJob }) {
 
     api.demand()
       .then(({ demand: rows }) => {
-        if (active && rows && rows.length > 0) {
+        if (active && rows) {
           setDemandList(rows.map(r => [r.skill, r.count]));
         }
       })
@@ -151,6 +145,7 @@ export function StudentDashboard({ jobs = [], user, onSelectJob }) {
         setExtracted(profile.extractedSkills || []);
       }
       setSaved(true);
+      setAiVersion(v => v + 1);
       setTimeout(() => setSaved(false), 4000);
     } catch (err) {
       setSaveError(err.message || 'Failed to save profile');
@@ -170,8 +165,13 @@ export function StudentDashboard({ jobs = [], user, onSelectJob }) {
       if (profile) {
         setResume(profile.resume);
         setExtracted(profile.extractedSkills || []);
-        setUploadNotice(`Resume "${profile.resume?.originalName || file.name}" uploaded & saved to database.`);
-        setTimeout(() => setUploadNotice(''), 5000);
+        setAiVersion(v => v + 1);
+        if (profile.resumeReadable === false) {
+          setSaveError('Resume saved, but no text could be read from it (it may be a scanned image). Upload a text-based PDF, DOCX or TXT for better matching and AI suggestions.');
+        } else {
+          setUploadNotice(`Resume "${profile.resume?.originalName || file.name}" uploaded & saved to database.`);
+          setTimeout(() => setUploadNotice(''), 5000);
+        }
       }
     } catch (err) {
       setSaveError(`Upload failed: ${err.message}`);
@@ -188,6 +188,8 @@ export function StudentDashboard({ jobs = [], user, onSelectJob }) {
       return true;
     })
     .filter(j => `${j.title} ${j.company} ${j.department || ''} ${j.skills.join(' ')}`.toLowerCase().includes(filter.toLowerCase()));
+
+  const maxDemand = Math.max(1, ...demandList.map(([, n]) => n));
 
   const resumeDisplayName = (typeof resume === 'string' ? resume : resume?.originalName) || '';
 
@@ -370,19 +372,22 @@ export function StudentDashboard({ jobs = [], user, onSelectJob }) {
           </div>
           <h3>Skills employers ask for</h3>
           <p>Stay one step ahead of the next posting.</p>
+          {demandList.length === 0 && <p>No open postings yet.</p>}
           {demandList.map(([skill, n]) => (
             <div className="demand-row" key={skill}>
               <div>
                 <b>{skill}</b>
-                <small>{n} postings</small>
+                <small>{n} posting{n === 1 ? '' : 's'}</small>
               </div>
               <div className="bar">
-                <i style={{ width: `${Math.min(100, (n / 5) * 100)}%` }} />
+                <i style={{ width: `${(n / maxDemand) * 100}%` }} />
               </div>
             </div>
           ))}
         </section>
       </div>
+
+      <AiSuggestions version={aiVersion} />
 
       <section className="opportunities">
         <div className="section-heading">

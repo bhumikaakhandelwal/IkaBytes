@@ -8,6 +8,8 @@ import jobRoutes from './routes/jobs.js';
 import applicationRoutes from './routes/applications.js';
 import marketRoutes from './routes/market.js';
 import { notFound, errorHandler } from './middleware/error.js';
+import { resetStuckAnalyses } from './services/insights.js';
+import { isLLMConfigured, llmConfig } from './services/llm.js';
 
 if (!process.env.JWT_SECRET) {
   console.error('JWT_SECRET is not set. Copy .env.example to .env and fill it in.');
@@ -21,7 +23,7 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '1mb' }));
 
-app.get('/api/health', (req, res) => res.json({ ok: true, ai: Boolean(process.env.AI_SERVICE_URL) }));
+app.get('/api/health', (req, res) => res.json({ ok: true, aiSuggestions: isLLMConfigured(), aiRanking: Boolean(process.env.AI_SERVICE_URL) }));
 app.use('/api/auth', authRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/jobs', jobRoutes);
@@ -34,7 +36,13 @@ app.use(errorHandler);
 const PORT = Number(process.env.PORT) || 5000;
 
 connectDB(process.env.MONGODB_URI)
-  .then(() => app.listen(PORT, () => console.log(`SkillMatch API running on http://localhost:${PORT}`)))
+  .then(() => resetStuckAnalyses())
+  .then(() => app.listen(PORT, () => {
+    console.log(`SkillMatch API running on http://localhost:${PORT}`);
+    console.log(isLLMConfigured()
+      ? `AI suggestions enabled (model: ${llmConfig().model})`
+      : 'AI suggestions disabled: set GROQ_API_KEY in server/.env');
+  }))
   .catch((err) => {
     console.error('Failed to start server:', err.message);
     process.exit(1);

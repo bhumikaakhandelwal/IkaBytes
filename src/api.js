@@ -45,12 +45,18 @@ export const api = {
     return request('/profile/me/resume', { method: 'POST', form });
   },
 
-  listJobs: (q = '') => request(`/jobs${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+  // status: 'all' (default) | 'Open' | 'Closed'
+  listJobs: (status = 'all') => request(`/jobs?status=${encodeURIComponent(status)}`),
   createJob: (payload) => request('/jobs', { method: 'POST', body: payload }),
   updateJob: (id, payload) => request(`/jobs/${id}`, { method: 'PATCH', body: payload }),
   shortlists: (limit = 3) => request(`/jobs/shortlists?limit=${limit}`),
   leaderboard: (id) => request(`/jobs/${id}/leaderboard`),
   apply: (id) => request(`/jobs/${id}/apply`, { method: 'POST' }),
+  toggleShortlist: (jobId, profileId) => request(`/jobs/${jobId}/shortlist`, { method: 'POST', body: { profileId } }),
+
+  // AI suggestions (cached in the database; Groq is only called when something changed)
+  getInsights: () => request('/profile/me/insights'),
+  refreshInsights: () => request('/profile/me/insights/refresh', { method: 'POST' }),
 
   myApplications: () => request('/applications/me'),
   demand: () => request('/market/demand'),

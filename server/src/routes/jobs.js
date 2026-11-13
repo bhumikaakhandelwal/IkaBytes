@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import JobPosting, { serializeJob, JOB_STATUSES } from '../models/JobPosting.js';
+import JobPosting, { serializeJob, JOB_STATUSES, ALL_DEPARTMENTS } from '../models/JobPosting.js';
 import StudentProfile from '../models/StudentProfile.js';
 import Application from '../models/Application.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
@@ -12,7 +12,17 @@ router.use(requireAuth);
 
 const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-function candidateView(entry, rank, viewer) {
+// Accepts the frontend's "cgpaCutoff" or the API's "minCgpa"
+function readCgpa(body) {
+  const raw = body.cgpaCutoff !== undefined ? body.cgpaCutoff : body.minCgpa;
+  if (raw === undefined) return undefined;
+  if (raw === '' || raw === null) return null;
+  const n = Number(raw);
+  if (Number.isNaN(n) || n < 0 || n > 10) throw new HttpError(400, 'CGPA cutoff must be between 0 and 10.');
+  return n;
+}
+
+function candidateView(entry, rank, viewer, shortlistedIds = new Set()) {
   const p = entry.profile;
   const isYou = viewer.role === 'student' && p.user.toString() === viewer.id;
   // Students see where they stand, but not other students' identities.
@@ -29,29 +39,31 @@ function candidateView(entry, rank, viewer) {
     missing: entry.missing,
     score: entry.score,
     status: entry.status,
+    eligible: entry.eligible,
     evidence: evidenceLabel(p),
     reason: entry.reason,
     source: entry.source,
+    shortlisted: hide ? undefined : shortlistedIds.has(p._id.toString()),
     isYou,
   };
 }
 
-// GET /api/jobs?q=react&status=Open
+// GET /api/jobs?q=react&status=Open|Closed|all
 router.get('/', asyncHandler(async (req, res) => {
   const filter = {};
   const status = req.query.status || (req.user.role === 'student' ? 'Open' : undefined);
   if (status && status !== 'all') filter.status = status;
   if (req.query.q) {
     const rx = new RegExp(escapeRegex(String(req.query.q).trim()), 'i');
-    filter.$or = [{ title: rx }, { company: rx }, { skills: rx }];
+    filter.$or = [{ title: rx }, { company: rx }, { skills: rx }, { department: rx }];
   }
   const jobs = await JobPosting.find(filter).sort({ createdAt: -1 }).limit(200).lean();
   res.json({ jobs: jobs.map(serializeJob) });
 }));
 
-// POST /api/jobs  (TPO)  { title, company, description, skills, minCgpa? }
+// POST /api/jobs  (TPO)  { title, company, department, description, skills, cgpaCutoff }
 router.post('/', requireRole('tpo'), asyncHandler(async (req, res) => {
-  const { title, company, description = '', skills, minCgpa } = req.body;
+  const { title, company, description = '', skills, department } = req.body;
   const cleanSkills = normalizeList(skills, { max: 20 });
   if (!title?.trim() || !company?.trim() || cleanSkills.length === 0) {
     throw new HttpError(400, 'Add a role title, company and at least one required skill.');
@@ -61,7 +73,8 @@ router.post('/', requireRole('tpo'), asyncHandler(async (req, res) => {
     company: company.trim(),
     description,
     skills: cleanSkills,
-    minCgpa: minCgpa === '' || minCgpa == null ? null : Number(minCgpa),
+    department: department?.trim() || ALL_DEPARTMENTS,
+    minCgpa: readCgpa(req.body) ?? null,
     postedBy: req.user.id,
   });
   res.status(201).json({ job: serializeJob(job) });
@@ -71,19 +84,21 @@ router.post('/', requireRole('tpo'), asyncHandler(async (req, res) => {
 router.get('/shortlists', requireRole('tpo'), asyncHandler(async (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 3, 10);
   const [jobs, profiles] = await Promise.all([
-    JobPosting.find({ status: 'Open' }).sort({ createdAt: -1 }).limit(100).lean(),
+    JobPosting.find({}).sort({ createdAt: -1 }).limit(100).lean(),
     StudentProfile.find({ 'skillIndex.0': { $exists: true } }).limit(1000).lean(),
   ]);
   const viewer = req.user;
   const shortlists = {};
   for (const job of jobs) {
+    const shortlistedIds = new Set((job.shortlisted || []).map(String));
     const ranked = profiles
       .map((profile) => ({ profile, ...scoreCandidate(job, profile), source: 'rules' }))
+      .filter((e) => e.matched.length > 0)
       .sort((a, b) => b.score - a.score)
       .slice(0, limit);
-    shortlists[job._id.toString()] = ranked.map((entry, i) => candidateView(entry, i + 1, viewer));
+    shortlists[job._id.toString()] = ranked.map((entry, i) => candidateView(entry, i + 1, viewer, shortlistedIds));
   }
-  res.json({ shortlists });
+  res.json({ shortlists, totalStudents: profiles.length });
 }));
 
 // GET /api/jobs/:id
@@ -93,22 +108,49 @@ router.get('/:id', asyncHandler(async (req, res) => {
   res.json({ job: serializeJob(job) });
 }));
 
-// PATCH /api/jobs/:id  (TPO)
+// PATCH /api/jobs/:id  (TPO) — edit fields or open/close the role
 router.patch('/:id', requireRole('tpo'), asyncHandler(async (req, res) => {
   const job = await JobPosting.findById(req.params.id);
   if (!job) throw new HttpError(404, 'Job not found.');
-  const { title, company, description, skills, status, minCgpa } = req.body;
+  const { title, company, description, skills, status, department } = req.body;
   if (title !== undefined) job.title = title;
   if (company !== undefined) job.company = company;
   if (description !== undefined) job.description = description;
+  if (department !== undefined) job.department = department || ALL_DEPARTMENTS;
   if (skills !== undefined) job.skills = normalizeList(skills, { max: 20 });
-  if (minCgpa !== undefined) job.minCgpa = minCgpa === '' || minCgpa === null ? null : Number(minCgpa);
+  const cgpa = readCgpa(req.body);
+  if (cgpa !== undefined) job.minCgpa = cgpa;
   if (status !== undefined) {
     if (!JOB_STATUSES.includes(status)) throw new HttpError(400, 'Status must be Open or Closed.');
     job.status = status;
   }
   await job.save();
   res.json({ job: serializeJob(job) });
+}));
+
+// POST /api/jobs/:id/shortlist  (TPO)  { profileId } — adds or removes a student from the shortlist
+router.post('/:id/shortlist', requireRole('tpo'), asyncHandler(async (req, res) => {
+  const { profileId } = req.body;
+  if (!profileId) throw new HttpError(400, 'profileId is required.');
+  const job = await JobPosting.findById(req.params.id);
+  if (!job) throw new HttpError(404, 'Job not found.');
+  const profile = await StudentProfile.findById(profileId).select('_id user').lean();
+  if (!profile) throw new HttpError(404, 'Student not found.');
+
+  const already = job.shortlisted.some((id) => id.toString() === profileId);
+  if (already) {
+    job.shortlisted.pull(profileId);
+  } else {
+    job.shortlisted.push(profileId);
+  }
+  await job.save();
+
+  // Keep the student's application (if any) in step with the shortlist
+  await Application.updateOne(
+    { job: job._id, student: profile.user },
+    { status: already ? 'applied' : 'shortlisted' }
+  );
+  res.json({ job: serializeJob(job), shortlisted: !already });
 }));
 
 // DELETE /api/jobs/:id  (TPO)
@@ -124,13 +166,17 @@ router.get('/:id/leaderboard', asyncHandler(async (req, res) => {
   const job = await JobPosting.findById(req.params.id).lean();
   if (!job) throw new HttpError(404, 'Job not found.');
   const limit = Math.min(Number(req.query.limit) || 50, 200);
+  const shortlistedIds = new Set((job.shortlisted || []).map(String));
 
-  // Only profiles sharing at least one required skill — uses the skillIndex index.
+  // Profiles sharing at least one required skill (uses the skillIndex index),
+  // plus anyone already shortlisted so they never disappear from the list.
   const keys = job.skills.map((s) => s.toLowerCase());
-  const profiles = await StudentProfile.find({ skillIndex: { $in: keys } }).limit(1000).lean();
+  const profiles = await StudentProfile.find({
+    $or: [{ skillIndex: { $in: keys } }, { _id: { $in: job.shortlisted || [] } }],
+  }).limit(1000).lean();
 
   const ranked = await rankCandidates(job, profiles);
-  let candidates = ranked.slice(0, limit).map((entry, i) => candidateView(entry, i + 1, req.user));
+  const candidates = ranked.slice(0, limit).map((entry, i) => candidateView(entry, i + 1, req.user, shortlistedIds));
 
   // Make sure a student always sees their own position, even outside the top N.
   if (req.user.role === 'student' && !candidates.some((c) => c.isYou)) {

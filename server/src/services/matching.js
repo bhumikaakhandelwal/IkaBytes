@@ -40,14 +40,19 @@ export function scoreCandidate(job, profile) {
 
   let score = Math.min(100, Math.round(skillPart + evidencePart + cgpaPart));
   const belowCgpa = job.minCgpa != null && profile.cgpa != null && profile.cgpa < job.minCgpa;
-  if (belowCgpa) score = Math.min(score, 50);
+  const wrongDept = Boolean(
+    job.department && job.department !== 'All Departments' &&
+    profile.department && profile.department.toLowerCase() !== job.department.toLowerCase()
+  );
+  if (belowCgpa || wrongDept) score = Math.min(score, 50);
 
   let reason = `${matched.length} of ${required.length} required skills matched`;
   if (missing.length) reason += `; missing ${missing.join(', ')}`;
   reason += '.';
   if (belowCgpa) reason += ` CGPA ${profile.cgpa} is below the ${job.minCgpa} cut-off.`;
+  if (wrongDept) reason += ` Role is for ${job.department} only.`;
 
-  return { score, matched, missing, status: statusFor(score), reason };
+  return { score, matched, missing, eligible: !belowCgpa && !wrongDept, status: statusFor(score), reason };
 }
 
 /**

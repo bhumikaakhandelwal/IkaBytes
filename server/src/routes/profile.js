@@ -1,14 +1,23 @@
 import fs from 'node:fs/promises';
-import path from 'node:path';
 import { Router } from 'express';
 import StudentProfile from '../models/StudentProfile.js';
 import User from '../models/User.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { resumeUpload } from '../middleware/upload.js';
 import { normalizeList, extractSkillsFromText, parseResumeText } from '../services/skills.js';
+import { queueAnalysis, isStale } from '../services/insights.js';
+import { isLLMConfigured } from '../services/llm.js';
 import { asyncHandler, HttpError } from '../utils/asyncHandler.js';
 
 const router = Router();
+
+// Asks for AI suggestions in the background (runs only if the inputs changed)
+// and returns the profile with the up-to-date status.
+async function respondWithAnalysis(res, profileId, extra = {}) {
+  const outcome = await queueAnalysis(profileId);
+  const fresh = await StudentProfile.findById(profileId);
+  res.json({ profile: { ...fresh.toPublic(), ...extra }, ai: outcome });
+}
 
 async function getOrCreateProfile(userId) {
   let profile = await StudentProfile.findOne({ user: userId });
@@ -47,7 +56,7 @@ router.put('/me', requireAuth, requireRole('student'), asyncHandler(async (req, 
 
   await profile.save();
   if (name !== undefined) await User.updateOne({ _id: req.user.id }, { name: profile.name });
-  res.json({ profile: profile.toPublic() });
+  await respondWithAnalysis(res, profile._id);
 }));
 
 // POST /api/profile/me/resume  (multipart/form-data, field "resume")
@@ -70,14 +79,46 @@ router.post(
     };
 
     // Parse text from uploaded resume (PDF, DOCX, TXT) and extract detected skills
-    const text = await parseResumeText(req.file.path, req.file.originalname);
+    const text = (await parseResumeText(req.file.path, req.file.originalname)) || '';
     profile.extractedSkills = extractSkillsFromText(text);
+    // Saved so the AI can use it later without re-reading the file
+    profile.resumeText = text.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim().slice(0, 20000);
 
     await profile.save();
     if (oldPath && oldPath !== req.file.path) fs.unlink(oldPath).catch(() => {});
-    res.json({ profile: profile.toPublic() });
+    // resumeReadable is false for scanned PDFs (images) — the AI then works from the profile only
+    await respondWithAnalysis(res, profile._id, { resumeReadable: text.trim().length > 50 });
   })
 );
+
+// GET /api/profile/me/insights — cached AI suggestions (no Groq call). Poll while status is "pending".
+router.get('/me/insights', requireAuth, requireRole('student'), asyncHandler(async (req, res) => {
+  const profile = await getOrCreateProfile(req.user.id);
+  const insights = profile.toPublic().aiInsights;
+  res.json({
+    aiEnabled: isLLMConfigured(),
+    insights,
+    // true when new jobs were posted or the profile changed since these suggestions were made
+    stale: insights.status === 'ready' ? await isStale(profile._id) : false,
+    extractedSkills: profile.extractedSkills,
+  });
+}));
+
+// POST /api/profile/me/insights/refresh — calls Groq only if something changed since last time
+router.post('/me/insights/refresh', requireAuth, requireRole('student'), asyncHandler(async (req, res) => {
+  if (!isLLMConfigured()) throw new HttpError(503, 'AI suggestions are not set up on the server yet.');
+  const profile = await getOrCreateProfile(req.user.id);
+  const outcome = await queueAnalysis(profile._id);
+  if (outcome === 'limit') {
+    throw new HttpError(429, "You've reached today's limit for AI suggestions. Try again tomorrow.");
+  }
+  const fresh = await StudentProfile.findById(profile._id);
+  res.json({
+    ai: outcome,
+    insights: fresh.toPublic().aiInsights,
+    message: outcome === 'cached' ? 'Your suggestions are already up to date.' : 'Analysing your profile…',
+  });
+}));
 
 // GET /api/profile/:userId/resume — the student themself or any placement officer
 router.get('/:userId/resume', requireAuth, asyncHandler(async (req, res) => {

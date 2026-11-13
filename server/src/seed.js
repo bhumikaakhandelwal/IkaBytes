@@ -26,15 +26,15 @@ const students = [
 ];
 
 const jobs = [
-  { title: 'Frontend Engineer', company: 'Infosys', skills: ['React', 'CSS', 'JavaScript'],
+  { title: 'Frontend Engineer', company: 'Infosys', department: 'Computer Engineering', minCgpa: 7.5, skills: ['React', 'CSS', 'JavaScript'],
     description: 'Build accessible, responsive interfaces for enterprise clients.' },
-  { title: 'Data Analyst', company: 'SignalWorks', skills: ['Python', 'SQL', 'Excel'],
+  { title: 'Data Analyst', company: 'SignalWorks', department: 'Information Technology', minCgpa: 7.0, skills: ['Python', 'SQL', 'Excel'],
     description: 'Turn product data into weekly insights for the growth team.' },
-  { title: 'Backend Developer', company: 'TechNova', skills: ['Node.js', 'SQL', 'APIs'],
+  { title: 'Backend Developer', company: 'TechNova', department: 'Computer Engineering', minCgpa: 8.0, skills: ['Node.js', 'SQL', 'APIs'],
     description: 'Design and ship REST services for a fintech platform.' },
-  { title: 'Product Engineer', company: 'Orbit Systems', skills: ['React', 'TypeScript', 'AWS'],
+  { title: 'Product Engineer', company: 'Orbit Systems', department: 'All Departments', status: 'Closed', skills: ['React', 'TypeScript', 'AWS'],
     description: 'Own features end-to-end in a small product squad.', minCgpa: 7.5 },
-  { title: 'Cloud Associate', company: 'Northstar Labs', skills: ['AWS', 'Linux', 'Networking'],
+  { title: 'Cloud Associate', company: 'Northstar Labs', department: 'All Departments', minCgpa: 7.0, skills: ['AWS', 'Linux', 'Networking'],
     description: 'Support cloud migrations and infrastructure automation.' },
 ];
 

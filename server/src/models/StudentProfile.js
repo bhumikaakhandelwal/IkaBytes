@@ -21,6 +21,26 @@ const studentProfileSchema = new mongoose.Schema(
     },
     // Skills detected from the uploaded resume text
     extractedSkills: { type: [String], default: [] },
+    // Plain text read from the resume, kept so the AI never needs to re-read the file
+    resumeText: { type: String, select: false, default: '' },
+    // Latest AI suggestions, cached so the Groq API is only called when something changes
+    aiInsights: {
+      status: { type: String, enum: ['idle', 'pending', 'ready', 'failed'], default: 'idle' },
+      summary: String,
+      strengths: [String],
+      gaps: [String],
+      suggestions: [{ _id: false, title: String, detail: String, priority: String }],
+      jobFits: [{ _id: false, jobId: String, title: String, company: String, fit: String, reason: String, nextStep: String }],
+      // Hash of the inputs used; if the inputs hash the same, the cached result is reused
+      fingerprint: String,
+      model: String,
+      error: String,
+      requestedAt: Date,
+      generatedAt: Date,
+      // Per-student daily cap on Groq calls
+      dailyRuns: { type: Number, default: 0 },
+      dailyRunsDate: String,
+    },
     // Lower-cased union of skills + extractedSkills, used for fast matching queries
     skillIndex: { type: [String], default: [], index: true },
   },
@@ -32,6 +52,14 @@ studentProfileSchema.pre('save', function buildSkillIndex(next) {
   this.skillIndex = [...new Set(all.filter(Boolean))];
   next();
 });
+
+// What the frontend sees (the internal fingerprint is left out)
+export function publicInsights(ai) {
+  if (!ai?.status) return { status: 'idle' };
+  const plain = typeof ai.toObject === 'function' ? ai.toObject() : { ...ai };
+  delete plain.fingerprint;
+  return plain;
+}
 
 studentProfileSchema.methods.toPublic = function toPublic() {
   return {
@@ -49,6 +77,7 @@ studentProfileSchema.methods.toPublic = function toPublic() {
     resume: this.resume?.originalName
       ? { originalName: this.resume.originalName, uploadedAt: this.resume.uploadedAt }
       : null,
+    aiInsights: publicInsights(this.aiInsights),
     updatedAt: this.updatedAt,
   };
 };

@@ -2277,3 +2277,29 @@ input.has-error {
 .form-grid select.is-placeholder {
   color: #9a8ca2;
 }
+/* ===== Loading spinner (used by App, TPO dashboard and AI panel) ===== */
+.spin { animation: spin 1s linear infinite; vertical-align: -3px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+button:disabled { opacity: .6; cursor: not-allowed; }
+
+/* ===== AI career suggestions panel ===== */
+.insights-panel { padding: 22px; margin-top: 22px; }
+.insights-panel .panel-heading b { display: flex; align-items: center; gap: 6px; }
+.insights-panel .small-primary { display: flex; align-items: center; gap: 6px; }
+.insights-empty { font-size: 12px; }
+.insights-note { font-size: 11px; color: #78568a; background: #f7eff9; border-radius: 8px; padding: 8px 10px; margin: 0 0 12px; }
+.insights-summary { font-size: 13px; line-height: 1.6; margin: 0 0 16px; }
+.insights-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 6px; }
+.insights-panel ul { margin: 0 0 14px; padding-left: 18px; font-size: 12px; line-height: 1.7; color: #4a3a52; }
+.insights-panel .eyebrow { font-size: 9px; margin: 4px 0 8px; }
+.suggestion-list { display: grid; gap: 8px; margin-bottom: 16px; }
+.suggestion { display: flex; gap: 10px; border: 1px solid var(--border); border-radius: 10px; padding: 11px 12px; color: var(--purple); }
+.suggestion b { font-size: 12px; color: var(--ink); display: flex; align-items: center; gap: 6px; }
+.suggestion p { margin: 4px 0 0; font-size: 11px; line-height: 1.5; color: var(--muted); }
+.fit-list { display: grid; gap: 8px; margin-bottom: 12px; }
+.fit-row { border: 1px solid var(--border); background: #fff; border-radius: 10px; padding: 11px 12px; display: grid; gap: 4px; color: var(--ink); }
+.fit-row span { font-size: 12px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.fit-row small { font-size: 11px; color: var(--muted); line-height: 1.5; }
+.fit-row .next-step { color: var(--purple2); }
+.form-error svg { vertical-align: -2px; }
+@media (max-width: 560px) { .insights-cols { grid-template-columns: 1fr; } }

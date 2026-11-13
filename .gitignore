@@ -1,0 +1,58 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Diagnostic reports
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Dependencies
+node_modules/
+
+# Local build / cache outputs
+dist/
+dist-ssr/
+.vite/
+*.local
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Unrequired JSON files & lock files
+# Ignores all JSON files by default, while keeping required config files (e.g., package.json)
+package-lock.json
+*.json
+!package.json
+!tsconfig.json
+!tsconfig.*.json
+!jsconfig.json
+
+# Unrequired JS files, build artifacts & source maps
+*.min.js
+*.bundle.js
+*.chunk.js
+*.js.map
+*.mjs.map
+*.cjs.map
+
+# Ignore unrequired JS files by default, while keeping source and config files
+*.js
+!src/**
+!*.config.js
+!*.config.mjs
+!*.config.cjs
+!vite.config.*
+
+# Editor / IDE settings
+.vscode/
+.idea/
+
+# OS generated files
+.DS_Store
+Thumbs.db

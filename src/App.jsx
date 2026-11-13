@@ -28,25 +28,79 @@ function Tag({ children, tone = '' }) { return <span className={`tag ${tone}`}>{
 
 function Login({ onLogin }) {
   const [role, setRole] = useState('Student');
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [register, setRegister] = useState(false);
-  const submit = (e) => { e.preventDefault(); onLogin(role, email || (role === 'Student' ? 'student@college.edu' : 'officer@college.edu')); };
+  const submit = (e) => {
+  e.preventDefault();
+
+  if (register && !fullName.trim()) {
+    alert("Please enter your full name");
+    return;
+  }
+
+  onLogin(
+    role,
+    email,
+    register ? fullName.trim() : ''
+  );
+};
   return <main className="login-shell">
     <section className="login-hero">
       <Brand/>
-      <div className="hero-copy"><p className="eyebrow light">THE SIGNAL BEHIND EVERY SHORTLIST</p><h1>Turn potential into placement.</h1><p>One clearer profile. Smarter matching. Better conversations with the companies that matter.</p></div>
-      <div className="hero-foot">Built for ambitious campuses · 2026</div>
+      <div className="hero-copy"><p className="eyebrow light">SKILL-BASED CAREER MATCHING</p><h1>Right skills. Right roles. Right away.</h1><p>SkillMatch analyses your profile against real job requirements and shows you where you fit best.</p></div>
+      <div className="hero-foot">© 2026 SkillMatch · Placement Intelligence</div>
     </section>
     <section className="login-panel"><div className="login-form-wrap">
-      <p className="eyebrow">WELCOME BACK</p><h2>{register ? 'Create your workspace.' : 'Your next role starts here.'}</h2><p className="muted">Sign in to your placement workspace.</p>
-      <div className="role-switch">
+<p className="eyebrow">
+  {role === 'Placement officer' ? 'PLACEMENT INTELLIGENCE' : 'WELCOME BACK'}
+</p>
+
+<h2>
+  {register
+    ? 'Create your workspace.'
+    : role === 'Placement officer'
+      ? 'Smarter placements start here.'
+      : 'Your next role starts here.'}
+</h2>
+
+<p className="muted">
+  {role === 'Placement officer'
+    ? 'Find the right talent faster. Make confident placement decisions.'
+    : 'Sign in to your placement workspace and discover opportunities.'}
+</p>      <div className="role-switch">
         <button className={role === 'Student' ? 'selected' : ''} onClick={() => setRole('Student')}><GraduationCap size={17}/>Student</button>
         <button className={role === 'Placement officer' ? 'selected' : ''} onClick={() => setRole('Placement officer')}><BriefcaseBusiness size={17}/>Placement officer</button>
       </div>
       <form onSubmit={submit} className="login-fields">
-        <input type="email" placeholder="College email" value={email} onChange={e=>setEmail(e.target.value)} />
-        <input type="password" minLength="6" placeholder="Password (6+ characters)" value={password} onChange={e=>setPassword(e.target.value)} required />
+
+  {register && (
+    <input
+      type="text"
+      placeholder="Full Name"
+      value={fullName}
+      onChange={e => setFullName(e.target.value)}
+      required
+    />
+  )}
+
+  <input
+    type="email"
+    placeholder="College email"
+    value={email}
+    onChange={e => setEmail(e.target.value)}
+    required
+  />
+
+  <input
+    type="password"
+    minLength="6"
+    placeholder="Password (6+ characters)"
+    value={password}
+    onChange={e => setPassword(e.target.value)}
+    required
+  />
         <button className="primary-btn full" type="submit">{register ? 'Create account' : 'Sign in'} <ArrowRight size={18}/></button>
       </form>
       <button className="text-button" onClick={() => setRegister(!register)}>{register ? 'Already have an account? Sign in' : 'New to SkillMatch? Create an account'}</button>
@@ -55,8 +109,9 @@ function Login({ onLogin }) {
   </main>;
 }
 
-function Header({ email, role, onLogout }) {
-  return <header className="topbar"><Brand/><div className="user-area"><span className="avatar">{(email[0] || 'S').toUpperCase()}</span><span className="user-meta"><b>{email.split('@')[0]}</b><small>{role}</small></span><button className="icon-button" title="Sign out" onClick={onLogout}><LogOut size={17}/></button></div></header>;
+function Header({ email, fullName, role, onLogout }) {
+  const displayName = fullName || email.split('@')[0];
+  return <header className="topbar"><Brand/><div className="user-area"><span className="avatar">{(displayName[0] || 'S').toUpperCase()}</span><span className="user-meta"><b>{displayName}</b><small>{role}</small></span><button className="icon-button" title="Sign out" onClick={onLogout}><LogOut size={17}/></button></div></header>;
 }
 
 function StudentView({ jobs, onSelectJob }) {
@@ -88,8 +143,11 @@ function StudentView({ jobs, onSelectJob }) {
       </section>
     </div>
     <section className="opportunities">
-      <div className="section-heading"><div><p className="eyebrow">OPEN OPPORTUNITIES</p><h2>See where you stand</h2></div><div className="search-box"><Search size={15}/><input placeholder="Search roles or skills" value={filter} onChange={e=>setFilter(e.target.value)}/></div></div>
-      <div className="job-grid">{filtered.map(job=><article className="job-card" key={job.id}><div className="job-card-top"><div><h3>{job.title}</h3><p>{job.company}</p></div><FileText size={15}/></div><div className="tags">{job.skills.map(s=><Tag key={s}>{s}</Tag>)}</div><button className="outline-btn" onClick={()=>onSelectJob(job)}>View leaderboard <ArrowRight size={14}/></button></article>)}</div>
+      <div className="section-heading"><div><h2>OPEN OPPORTUNITIES</h2></div><div className="search-box"><Search size={15}/><input placeholder="Search roles or skills" value={filter} onChange={e=>setFilter(e.target.value)}/></div></div>
+      <div className="job-grid">{filtered.map(job=><article className="job-card" key={job.id}><div className="job-card-top"><div><h3>{job.title}</h3><p>{job.company}</p></div><FileText size={15}/></div><div className="tags">{job.skills.map(s=><Tag key={s}>{s}</Tag>)}</div><div className="student-job-note">
+  <CheckCircle2 size={14}/>
+  Required skills shown above
+</div></article>)}</div>
       {filtered.length===0 && <div className="empty-state">No roles match that search.</div>}
     </section>
   </div>;
@@ -150,10 +208,22 @@ function App() {
   const [jobs,setJobs] = useState(initialJobs);
   const [selected,setSelected] = useState(null);
   const [mobileMenu,setMobileMenu] = useState(false);
-  if (!session) return <Login onLogin={(role,email)=>setSession({role,email})}/>;
-  return <div className="app-shell"><Header email={session.email} role={session.role} onLogout={()=>{setSession(null);setSelected(null)}}/>
-    {selected ? <Leaderboard job={selected} onBack={()=>setSelected(null)}/> :
-      session.role === 'Student' ? <StudentView jobs={jobs} onSelectJob={setSelected}/> : <OfficerView jobs={jobs} setJobs={setJobs} onSelectJob={setSelected}/>}
+  if (!session) return <Login onLogin={(role,email,fullName)=>setSession({role,email,fullName})}/>;
+  return <div className="app-shell"><Header email={session.email} fullName={session.fullName} role={session.role} onLogout={()=>{setSession(null);setSelected(null)}}/>
+    {session.role === 'Placement officer' && selected ? (
+  <Leaderboard
+    job={selected}
+    onBack={() => setSelected(null)}
+  />
+) : session.role === 'Student' ? (
+  <StudentView jobs={jobs}/>
+) : (
+  <OfficerView
+    jobs={jobs}
+    setJobs={setJobs}
+    onSelectJob={setSelected}
+  />
+)}
     <footer className="app-footer">SkillMatch <span>·</span> Placement intelligence for ambitious campuses</footer>
   </div>;
 }

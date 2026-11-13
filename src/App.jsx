@@ -1,11 +1,12 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   Sparkles, GraduationCap, BriefcaseBusiness, ArrowRight, LogOut, Plus,
   Upload, FileText, ChartNoAxesColumn, Users, Search, Bell, ChevronDown,
   ExternalLink, CheckCircle2, TrendingUp, LayoutDashboard, UserRound,
   Building2, X, Menu, SlidersHorizontal, Download, Github, Linkedin,
-  Lock, Unlock, UserCheck, Check
+  Lock, Unlock, UserCheck, Check, Loader2
 } from 'lucide-react';
+import { api, tokenStore, ROLE_TO_API, ROLE_FROM_API } from './api.js';
 
 const initialJobs = [
   { id: 1, title: 'Frontend Engineer', company: 'Infosys', department: 'Computer Engineering', cgpaCutoff: '7.5', skills: ['React', 'CSS', 'JavaScript'], count: 2, status: 'Open', shortlisted: ['Aarav Sharma', 'Mira Naik'] },
@@ -34,6 +35,8 @@ function Login({ onLogin }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [register, setRegister] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
 
   const handleFullNameChange = (e) => {
     const val = e.target.value;
@@ -45,8 +48,9 @@ function Login({ onLogin }) {
     }
   };
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
+    setError('');
 
     if (register) {
       if (!fullName.trim()) {
@@ -59,11 +63,19 @@ function Login({ onLogin }) {
       }
     }
 
-    onLogin(
-      role,
-      email,
-      register ? fullName.trim() : ''
-    );
+    setBusy(true);
+    try {
+      const payload = { email, password, role: ROLE_TO_API[role] };
+      const { token, user } = register
+        ? await api.register({ ...payload, name: fullName.trim() })
+        : await api.login(payload);
+      tokenStore.set(token);
+      onLogin(user);
+    } catch (err) {
+      setError(err.message || 'Authentication failed');
+    } finally {
+      setBusy(false);
+    }
   };
   return <main className="login-shell">
     <section className="login-hero">
@@ -124,30 +136,68 @@ function Login({ onLogin }) {
           onChange={e => setPassword(e.target.value)}
           required
         />
-        <button className="primary-btn full" type="submit">{register ? 'Create account' : 'Sign in'} <ArrowRight size={18} /></button>
+        <button className="primary-btn full" type="submit" disabled={busy}>{busy ? 'Please wait…' : register ? 'Create account' : 'Sign in'} <ArrowRight size={18} /></button>
+        {error && <p className="field-error" style={{ fontSize: '13px', marginTop: '6px' }}>{error}</p>}
       </form>
-      <button className="text-button" onClick={() => setRegister(!register)}>{register ? 'Already have an account? Sign in' : 'New to SkillMatch? Create an account'}</button>
+      <button className="text-button" onClick={() => { setRegister(!register); setError(''); setNameError(''); }}>{register ? 'Already have an account? Sign in' : 'New to SkillMatch? Create an account'}</button>
     </div></section>
   </main>;
 }
 
-function Header({ email, fullName, role, onLogout }) {
-  const displayName = fullName || email.split('@')[0];
-  return <header className="topbar"><Brand /><div className="user-area"><span className="avatar">{(displayName[0] || 'S').toUpperCase()}</span><span className="user-meta"><b>{displayName}</b><small>{role}</small></span><button className="icon-button" title="Sign out" onClick={onLogout}><LogOut size={17} /></button></div></header>;
+function Header({ user, onLogout }) {
+  const displayName = user?.name || user?.email?.split('@')[0] || 'User';
+  const displayRole = ROLE_FROM_API[user?.role] || user?.role || 'Member';
+  return <header className="topbar"><Brand /><div className="user-area"><span className="avatar">{(displayName[0] || 'S').toUpperCase()}</span><span className="user-meta"><b>{displayName}</b><small>{displayRole}</small></span><button className="icon-button" title="Sign out" onClick={onLogout}><LogOut size={17} /></button></div></header>;
 }
 
-function StudentView({ jobs, onSelectJob, initialName }) {
-  const [name, setName] = useState(initialName || 'Aarav Sharma');
+function StudentView({ jobs, onSelectJob, user }) {
+  const [name, setName] = useState(user?.name || '');
   const [nameError, setNameError] = useState('');
   const [linkedin, setLinkedin] = useState('');
   const [projects, setProjects] = useState(['']);
-  const [resume, setResume] = useState('');
+  const [resume, setResume] = useState(null);
+  const [extracted, setExtracted] = useState([]);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadNotice, setUploadNotice] = useState('');
   const [filter, setFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [cgpa, setCgpa] = useState('');
   const [cgpaError, setCgpaError] = useState('');
   const [department, setDepartment] = useState('');
+  const [demandList, setDemandList] = useState(demand);
+
+  useEffect(() => {
+    let active = true;
+    api.getProfile()
+      .then(({ profile }) => {
+        if (!active || !profile) return;
+        setName(profile.name || user?.name || '');
+        setLinkedin(profile.linkedin || '');
+        setCgpa(profile.cgpa != null ? String(profile.cgpa) : '');
+        setDepartment(profile.department || '');
+        if (profile.projects && profile.projects.length > 0) {
+          setProjects(profile.projects);
+        }
+        setResume(profile.resume);
+        setExtracted(profile.extractedSkills || []);
+      })
+      .catch((err) => {
+        console.warn('Could not load profile from DB:', err.message);
+      });
+
+    api.demand()
+      .then(({ demand: rows }) => {
+        if (active && rows && rows.length > 0) {
+          setDemandList(rows.map(r => [r.skill, r.count]));
+        }
+      })
+      .catch(() => {});
+
+    return () => { active = false; };
+  }, [user]);
 
   const handleNameChange = (e) => {
     const val = e.target.value;
@@ -190,7 +240,7 @@ function StudentView({ jobs, onSelectJob, initialName }) {
     setCgpa(val);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!name.trim()) {
       setNameError('Please enter your full name');
       return;
@@ -208,7 +258,51 @@ function StudentView({ jobs, onSelectJob, initialName }) {
     }
     setNameError('');
     setCgpaError('');
-    setSaved(true);
+    setSaveError('');
+    setSaving(true);
+
+    try {
+      const cleanProjects = projects.map(p => p.trim()).filter(Boolean);
+      const { profile } = await api.updateProfile({
+        name: name.trim(),
+        department: department.trim(),
+        linkedin: linkedin.trim(),
+        cgpa: cgpa === '' ? null : Number(cgpa),
+        projects: cleanProjects,
+      });
+
+      setName(profile.name || '');
+      setLinkedin(profile.linkedin || '');
+      setCgpa(profile.cgpa != null ? String(profile.cgpa) : '');
+      setDepartment(profile.department || '');
+      if (profile.projects && profile.projects.length > 0) {
+        setProjects(profile.projects);
+      }
+      setSaved(true);
+      setTimeout(() => setSaved(false), 4000);
+    } catch (err) {
+      setSaveError(err.message || 'Failed to save profile');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleResumeUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setUploadNotice('');
+    try {
+      const { profile } = await api.uploadResume(file);
+      setResume(profile.resume);
+      setExtracted(profile.extractedSkills || []);
+      setUploadNotice(`Resume "${profile.resume?.originalName || file.name}" uploaded & saved to database.`);
+      setTimeout(() => setUploadNotice(''), 5000);
+    } catch (err) {
+      setUploadNotice(`Upload failed: ${err.message}`);
+    } finally {
+      setUploading(false);
+    }
   };
 
   const filtered = jobs
@@ -223,7 +317,7 @@ function StudentView({ jobs, onSelectJob, initialName }) {
     <div className="page-heading"><div><p className="eyebrow">STUDENT WORKSPACE</p><h1>Build your <em>placement profile</em></h1><p className="muted">Complete your profile to see how your skills line up with current job postings.</p></div><Tag tone="success"><CheckCircle2 size={13} /> {resume ? 'Resume uploaded' : 'Add a resume to get match-ready'}</Tag></div>
     <div className="student-grid">
       <section className="panel profile-panel">
-        <div className="panel-heading"><div><b>Your profile</b></div><button className="small-primary" onClick={handleSave}>Save changes</button></div>
+        <div className="panel-heading"><div><b>Your profile</b><small>Saved in MongoDB</small></div><button className="small-primary" onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button></div>
         <div className="form-grid">
           <label>
             Full name
@@ -349,12 +443,24 @@ function StudentView({ jobs, onSelectJob, initialName }) {
             </div>
           ))}
         </div>
-        <label className="upload-zone"><Upload size={18} /><span><b>{resume || 'Upload your resume'}</b><small>PDF, DOCX, or TXT · up to 5 MB</small></span><input type="file" accept=".pdf,.doc,.docx,.txt" onChange={e => setResume(e.target.files?.[0]?.name || '')} /></label>
-        {saved && <p className="inline-success"><CheckCircle2 size={14} /> Profile changes saved.</p>}
+        <label className="upload-zone">
+          <Upload size={18} />
+          <span>
+            <b>{resume?.originalName || (uploading ? 'Uploading resume…' : 'Upload your resume')}</b>
+            <small>
+              PDF, DOCX, or TXT · up to 5 MB
+              {extracted && extracted.length > 0 ? ` · detected: ${extracted.join(', ')}` : ''}
+            </small>
+          </span>
+          <input type="file" accept=".pdf,.doc,.docx,.txt" onChange={handleResumeUpload} disabled={uploading} />
+        </label>
+        {uploadNotice && <p className="inline-success" style={{ marginTop: '8px' }}><CheckCircle2 size={14} /> {uploadNotice}</p>}
+        {saved && <p className="inline-success" style={{ marginTop: '8px' }}><CheckCircle2 size={14} /> Profile changes saved to database.</p>}
+        {saveError && <p className="field-error" style={{ marginTop: '8px' }}>{saveError}</p>}
       </section>
       <section className="market-card">
         <div className="market-title"><span>MARKET PULSE</span><ChartNoAxesColumn size={17} /></div><h3>Skills employers ask for</h3><p>Stay one step ahead of the next posting.</p>
-        {demand.map(([skill, n]) => <div className="demand-row" key={skill}><div><b>{skill}</b><small>{n} postings</small></div><div className="bar"><i style={{ width: `${n / 5 * 100}%` }} /></div></div>)}
+        {demandList.map(([skill, n]) => <div className="demand-row" key={skill}><div><b>{skill}</b><small>{n} postings</small></div><div className="bar"><i style={{ width: `${Math.min(100, (n / 5) * 100)}%` }} /></div></div>)}
       </section>
     </div>
     <section className="opportunities">
@@ -824,10 +930,22 @@ function Leaderboard({ job, onBack, onUpdateJob }) {
 }
 
 function App() {
-  const [session, setSession] = useState(null);
+  const [user, setUser] = useState(null);
+  const [checking, setChecking] = useState(Boolean(tokenStore.get()));
   const [jobs, setJobs] = useState(initialJobs);
   const [selected, setSelected] = useState(null);
   const [mobileMenu, setMobileMenu] = useState(false);
+
+  useEffect(() => {
+    if (!tokenStore.get()) {
+      setChecking(false);
+      return;
+    }
+    api.me()
+      .then(({ user }) => setUser(user))
+      .catch(() => tokenStore.clear())
+      .finally(() => setChecking(false));
+  }, []);
 
   const handleUpdateJob = (updatedJob) => {
     setJobs(prevJobs => prevJobs.map(j => j.id === updatedJob.id ? updatedJob : j));
@@ -836,27 +954,45 @@ function App() {
     }
   };
 
-  if (!session) return <Login onLogin={(role, email, fullName) => setSession({ role, email, fullName })} />;
+  const handleLogout = () => {
+    tokenStore.clear();
+    setUser(null);
+    setSelected(null);
+  };
+
+  if (checking) {
+    return (
+      <div className="empty-state" style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+        <Loader2 size={20} className="spin" /> Opening your workspace…
+      </div>
+    );
+  }
+
+  if (!user) return <Login onLogin={setUser} />;
 
   const currentSelectedJob = selected ? (jobs.find(j => j.id === selected.id) || selected) : null;
+  const isOfficer = user.role === 'tpo' || user.role === 'Placement officer';
 
-  return <div className="app-shell"><Header email={session.email} fullName={session.fullName} role={session.role} onLogout={() => { setSession(null); setSelected(null); }} />
-    {session.role === 'Placement officer' && currentSelectedJob ? (
-      <Leaderboard
-        job={currentSelectedJob}
-        onBack={() => setSelected(null)}
-        onUpdateJob={handleUpdateJob}
-      />
-    ) : session.role === 'Student' ? (
-      <StudentView jobs={jobs} initialName={session.fullName} />
-    ) : (
-      <OfficerView
-        jobs={jobs}
-        setJobs={setJobs}
-        onSelectJob={setSelected}
-      />
-    )}
-    <footer className="app-footer">SkillMatch <span>·</span> Placement intelligence</footer>
-  </div>;
+  return (
+    <div className="app-shell">
+      <Header user={user} onLogout={handleLogout} />
+      {isOfficer && currentSelectedJob ? (
+        <Leaderboard
+          job={currentSelectedJob}
+          onBack={() => setSelected(null)}
+          onUpdateJob={handleUpdateJob}
+        />
+      ) : !isOfficer ? (
+        <StudentView jobs={jobs} user={user} onSelectJob={setSelected} />
+      ) : (
+        <OfficerView
+          jobs={jobs}
+          setJobs={setJobs}
+          onSelectJob={setSelected}
+        />
+      )}
+      <footer className="app-footer">SkillMatch <span>·</span> Placement intelligence</footer>
+    </div>
+  );
 }
 export default App;

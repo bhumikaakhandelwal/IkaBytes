@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { api } from './api.js';
 import AiSuggestions from './AiSuggestions.jsx';
+import TagInput from './TagInput.jsx';
 import { usePolling } from './usePolling.js';
 
 function Tag({ children, tone = '' }) {
@@ -14,6 +15,8 @@ export function StudentDashboard({ jobs = [], user, onSelectJob }) {
   const [name, setName] = useState(user?.name || '');
   const [nameError, setNameError] = useState('');
   const [linkedin, setLinkedin] = useState('');
+  const [skills, setSkills] = useState([]);
+  const [certifications, setCertifications] = useState([]);
   const [projects, setProjects] = useState(['']);
   const [resume, setResume] = useState(null);
   const [extracted, setExtracted] = useState([]);
@@ -40,6 +43,8 @@ export function StudentDashboard({ jobs = [], user, onSelectJob }) {
         setLinkedin(profile.linkedin || '');
         setCgpa(profile.cgpa != null ? String(profile.cgpa) : '');
         setDepartment(profile.department || '');
+        setSkills(profile.skills || []);
+        setCertifications(profile.certifications || []);
         if (profile.projects && profile.projects.length > 0) {
           setProjects(profile.projects);
         }
@@ -136,6 +141,8 @@ export function StudentDashboard({ jobs = [], user, onSelectJob }) {
         department: department.trim(),
         linkedin: linkedin.trim(),
         cgpa: parsedCgpa,
+        skills,
+        certifications,
         projects: cleanProjects,
       });
 
@@ -144,6 +151,8 @@ export function StudentDashboard({ jobs = [], user, onSelectJob }) {
         setLinkedin(profile.linkedin || '');
         setCgpa(profile.cgpa != null ? String(profile.cgpa) : '');
         setDepartment(profile.department || '');
+        setSkills(profile.skills || []);
+        setCertifications(profile.certifications || []);
         if (profile.projects && profile.projects.length > 0) {
           setProjects(profile.projects);
         }
@@ -312,6 +321,25 @@ export function StudentDashboard({ jobs = [], user, onSelectJob }) {
             </label>
           </div>
 
+          <TagInput
+            label="Skills"
+            values={skills}
+            onChange={(v) => { setSkills(v); setSaved(false); }}
+            placeholder="e.g. React, Python, SQL — press Enter after each"
+            hint="Add the technical skills you can show evidence for. Press Enter or comma after each one."
+            suggestions={extracted}
+            suggestionLabel="Found in your resume:"
+          />
+
+          <TagInput
+            label="Certifications"
+            values={certifications}
+            onChange={(v) => { setCertifications(v); setSaved(false); }}
+            placeholder="e.g. AWS Cloud Practitioner — press Enter after each"
+            hint="Include the issuer if helpful, e.g. “Google Data Analytics (Coursera)”."
+            max={20}
+          />
+
           <div className="project-links-full">
             <label>Project Links</label>
             {projects.map((project, index) => (
@@ -364,7 +392,17 @@ export function StudentDashboard({ jobs = [], user, onSelectJob }) {
                 {extracted && extracted.length > 0 ? ` · detected: ${extracted.join(', ')}` : ''}
               </small>
             </span>
-            <input type="file" accept=".pdf,.doc,.docx,.txt" onChange={handleResumeUpload} disabled={uploading} />
+            <span className="upload-btn">
+              {uploading ? 'Uploading…' : resumeDisplayName ? 'Replace file' : 'Choose file'}
+            </span>
+            {/* Native input is hidden: its "No file chosen" text contradicted the saved file name */}
+            <input
+              className="file-input-hidden"
+              type="file"
+              accept=".pdf,.doc,.docx,.txt"
+              onChange={handleResumeUpload}
+              disabled={uploading}
+            />
           </label>
           {uploadNotice && <p className="inline-success" style={{ marginTop: '8px' }}><CheckCircle2 size={14} /> {uploadNotice}</p>}
           {saved && <p className="inline-success" style={{ marginTop: '8px' }}><CheckCircle2 size={14} /> Profile changes saved to database.</p>}

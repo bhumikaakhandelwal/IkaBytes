@@ -7,6 +7,8 @@ function Tag({ children, tone = '' }) {
 }
 
 const FIT_TONE = { strong: 'matched', moderate: '', weak: 'missing' };
+const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 };
+const PRIORITY_TONE = { high: 'missing', medium: '', low: 'matched' };
 
 /**
  * Shows the student's AI career suggestions. They are stored in MongoDB, so opening the
@@ -98,12 +100,18 @@ export default function AiSuggestions({ version = 0 }) {
           </div>
 
           <p className="eyebrow">NEXT STEPS</p>
+          <p className="priority-legend">
+            Priority shows how much each step should improve your chances for the roles currently posted:
+            <b> high</b> = do this first, <b>medium</b> = worth doing soon, <b>low</b> = nice to have.
+          </p>
           <div className="suggestion-list">
-            {(insights.suggestions || []).map(s => (
+            {[...(insights.suggestions || [])]
+              .sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 1) - (PRIORITY_ORDER[b.priority] ?? 1))
+              .map(s => (
               <div className="suggestion" key={s.title}>
                 <Lightbulb size={15} />
                 <div>
-                  <b>{s.title} <Tag tone={s.priority === 'high' ? 'missing' : ''}>{s.priority}</Tag></b>
+                  <b>{s.title} <Tag tone={PRIORITY_TONE[s.priority] || ''}>{s.priority} priority</Tag></b>
                   <p>{s.detail}</p>
                 </div>
               </div>

@@ -2307,3 +2307,29 @@ button:disabled { opacity: .6; cursor: not-allowed; }
 /* ===== Live-update indicator (TPO dashboard) ===== */
 .live-dot { width: 7px; height: 7px; border-radius: 50%; background: #39a06b; display: inline-block; animation: live-pulse 2s ease-in-out infinite; }
 @keyframes live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+/* ===== Skills & certifications chip inputs (student profile) ===== */
+.tag-input-field { margin-top: 18px; display: grid; gap: 7px; }
+.tag-input-field > label { font-size: 13px; font-weight: 700; color: #66516f; }
+.tag-input-box { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 48px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 14px; background: #fff; cursor: text; }
+.tag-input-box:focus-within { outline: 3px solid #c9a9da; outline-offset: 2px; }
+.tag-input-box input { flex: 1; min-width: 160px; border: 0; outline: 0; background: transparent; font-size: 14px; padding: 6px 4px; color: var(--ink); }
+.chip { display: inline-flex; align-items: center; gap: 5px; background: #efe5f3; color: #5d3474; border-radius: 20px; padding: 5px 6px 5px 11px; font-size: 12px; font-weight: 600; }
+.chip button { border: 0; background: #e2d1ea; color: #5d3474; border-radius: 50%; width: 18px; height: 18px; display: grid; place-items: center; padding: 0; }
+.chip button:hover { background: #d2b8de; }
+.chip-suggestions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.chip-suggestions small { font-size: 11px; color: var(--muted); }
+.chip-suggest { display: inline-flex; align-items: center; gap: 3px; border: 1px dashed #c7a9d3; background: #fcf9fd; color: var(--purple); border-radius: 20px; padding: 4px 10px; font-size: 11px; font-weight: 600; }
+.chip-suggest:hover { background: #f3e9f7; }
+
+/* ===== Resume upload: custom button instead of the browser's "No file chosen" ===== */
+.upload-zone { position: relative; }
+.upload-zone:focus-within { outline: 3px solid #c9a9da; outline-offset: 2px; }
+.upload-zone input[type="file"].file-input-hidden { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; clip: rect(0 0 0 0); margin: 0; padding: 0; }
+.upload-btn { margin-left: auto; flex: none; background: #512568; color: #fff; border-radius: 8px; padding: 12px 19px; font-size: 13px; font-weight: 600; transition: all .2s ease; }
+.upload-zone:hover .upload-btn { background: #704080; transform: translateY(-1px); box-shadow: 0 4px 10px rgba(81, 37, 104, .2); }
+@media (max-width: 560px) { .upload-btn { margin-left: 0; } }
+
+/* ===== AI suggestion priority legend ===== */
+.priority-legend { font-size: 11px; color: var(--muted); line-height: 1.5; margin: -2px 0 10px; }
+.priority-legend b { color: #5d3474; }

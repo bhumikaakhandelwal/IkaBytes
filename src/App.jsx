@@ -263,20 +263,25 @@ function StudentView({ jobs, onSelectJob, user }) {
 
     try {
       const cleanProjects = projects.map(p => p.trim()).filter(Boolean);
+      const parsedCgpa = (cgpa === '' || cgpa === null || cgpa === undefined) ? null : Number(cgpa);
       const { profile } = await api.updateProfile({
         name: name.trim(),
         department: department.trim(),
         linkedin: linkedin.trim(),
-        cgpa: cgpa === '' ? null : Number(cgpa),
+        cgpa: parsedCgpa,
         projects: cleanProjects,
       });
 
-      setName(profile.name || '');
-      setLinkedin(profile.linkedin || '');
-      setCgpa(profile.cgpa != null ? String(profile.cgpa) : '');
-      setDepartment(profile.department || '');
-      if (profile.projects && profile.projects.length > 0) {
-        setProjects(profile.projects);
+      if (profile) {
+        setName(profile.name || '');
+        setLinkedin(profile.linkedin || '');
+        setCgpa(profile.cgpa != null ? String(profile.cgpa) : '');
+        setDepartment(profile.department || '');
+        if (profile.projects && profile.projects.length > 0) {
+          setProjects(profile.projects);
+        }
+        setResume(profile.resume);
+        setExtracted(profile.extractedSkills || []);
       }
       setSaved(true);
       setTimeout(() => setSaved(false), 4000);
@@ -292,16 +297,20 @@ function StudentView({ jobs, onSelectJob, user }) {
     if (!file) return;
     setUploading(true);
     setUploadNotice('');
+    setSaveError('');
     try {
       const { profile } = await api.uploadResume(file);
-      setResume(profile.resume);
-      setExtracted(profile.extractedSkills || []);
-      setUploadNotice(`Resume "${profile.resume?.originalName || file.name}" uploaded & saved to database.`);
-      setTimeout(() => setUploadNotice(''), 5000);
+      if (profile) {
+        setResume(profile.resume);
+        setExtracted(profile.extractedSkills || []);
+        setUploadNotice(`Resume "${profile.resume?.originalName || file.name}" uploaded & saved to database.`);
+        setTimeout(() => setUploadNotice(''), 5000);
+      }
     } catch (err) {
-      setUploadNotice(`Upload failed: ${err.message}`);
+      setSaveError(`Upload failed: ${err.message}`);
     } finally {
       setUploading(false);
+      e.target.value = '';
     }
   };
 
@@ -313,8 +322,10 @@ function StudentView({ jobs, onSelectJob, user }) {
     })
     .filter(j => `${j.title} ${j.company} ${j.department || ''} ${j.skills.join(' ')}`.toLowerCase().includes(filter.toLowerCase()));
 
+  const resumeDisplayName = (typeof resume === 'string' ? resume : resume?.originalName) || '';
+
   return <div className="workspace student-workspace">
-    <div className="page-heading"><div><p className="eyebrow">STUDENT WORKSPACE</p><h1>Build your <em>placement profile</em></h1><p className="muted">Complete your profile to see how your skills line up with current job postings.</p></div><Tag tone="success"><CheckCircle2 size={13} /> {resume ? 'Resume uploaded' : 'Add a resume to get match-ready'}</Tag></div>
+    <div className="page-heading"><div><p className="eyebrow">STUDENT WORKSPACE</p><h1>Build your <em>placement profile</em></h1><p className="muted">Complete your profile to see how your skills line up with current job postings.</p></div><Tag tone={resumeDisplayName ? 'success' : ''}><CheckCircle2 size={13} /> {resumeDisplayName ? 'Resume uploaded' : 'Add a resume to get match-ready'}</Tag></div>
     <div className="student-grid">
       <section className="panel profile-panel">
         <div className="panel-heading"><div><b>Your profile</b><small>Saved in MongoDB</small></div><button className="small-primary" onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button></div>
@@ -383,15 +394,24 @@ function StudentView({ jobs, onSelectJob, user }) {
               <option value="Computer Engineering">
                 Computer Engineering
               </option>
+              <option value="Information Technology">
+                Information Technology
+              </option>
               <option value="Electronics and Computer Science Engineering">
                 Electronics and Computer Science Engineering
               </option>
-              <option value="Civil Engineering">
-                Civil Engineering
+              <option value="Electronics">
+                Electronics
               </option>
               <option value="Mechanical Engineering">
                 Mechanical Engineering
               </option>
+              <option value="Civil Engineering">
+                Civil Engineering
+              </option>
+              {department && !['Computer Engineering', 'Information Technology', 'Electronics and Computer Science Engineering', 'Electronics', 'Mechanical Engineering', 'Civil Engineering'].includes(department) && (
+                <option value={department}>{department}</option>
+              )}
             </select>
           </label>
         </div>
@@ -446,7 +466,7 @@ function StudentView({ jobs, onSelectJob, user }) {
         <label className="upload-zone">
           <Upload size={18} />
           <span>
-            <b>{resume?.originalName || (uploading ? 'Uploading resume…' : 'Upload your resume')}</b>
+            <b>{resumeDisplayName || (uploading ? 'Uploading resume…' : 'Upload your resume')}</b>
             <small>
               PDF, DOCX, or TXT · up to 5 MB
               {extracted && extracted.length > 0 ? ` · detected: ${extracted.join(', ')}` : ''}

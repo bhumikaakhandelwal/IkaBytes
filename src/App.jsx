@@ -5,6 +5,7 @@ import {
 import { api, tokenStore, ROLE_TO_API, ROLE_FROM_API } from './api.js';
 import StudentDashboard from './StudentDashboard.jsx';
 import TpoDashboard from './TpoDashboard.jsx';
+import { usePolling } from './usePolling.js';
 
 export function Brand() {
   return (
@@ -184,9 +185,15 @@ export function App() {
   const reloadJobs = useCallback(async () => {
     try {
       const { jobs: rows } = await api.listJobs('all');
-      setJobs(rows);
+      // Only update when something actually changed, so the screen doesn't re-render every poll
+      setJobs(current => (JSON.stringify(current) === JSON.stringify(rows) ? current : rows));
       setJobsError('');
     } catch (err) {
+      if (err.status === 401) { // session expired
+        tokenStore.clear();
+        setUser(null);
+        return;
+      }
       setJobsError(err.message || 'Could not load jobs');
     }
   }, []);
@@ -194,6 +201,9 @@ export function App() {
   useEffect(() => {
     if (user) reloadJobs();
   }, [user, reloadJobs]);
+
+  // Live updates: re-read jobs from the database every 10 s and when the tab regains focus
+  usePolling(reloadJobs, 10000, Boolean(user));
 
   useEffect(() => {
     if (!tokenStore.get()) {

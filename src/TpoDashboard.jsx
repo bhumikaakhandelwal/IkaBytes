@@ -4,6 +4,7 @@ import {
   Unlock, Lock, UserCheck, Download, Loader2, AlertTriangle
 } from 'lucide-react';
 import { api } from './api.js';
+import { usePolling } from './usePolling.js';
 
 function Tag({ children, tone = '' }) {
   return <span className={`tag ${tone}`}>{children}</span>;
@@ -40,6 +41,8 @@ export function OfficerView({ jobs, reloadJobs, onSelectJob }) {
   }, []);
 
   useEffect(() => { loadShortlists(); }, [loadShortlists, jobs]);
+  // Rankings change when students update profiles or upload resumes, so refresh them live too
+  usePolling(loadShortlists, 10000);
 
   const handleCgpaCutoffChange = (e) => {
     const val = e.target.value;
@@ -191,7 +194,7 @@ export function OfficerView({ jobs, reloadJobs, onSelectJob }) {
               <h2>Live shortlists</h2>
               <p className="muted">Student profiles ranked against each job brief.</p>
             </div>
-            <span className="ai-label"><Sparkles size={13} /> Skill-match ranking</span>
+            <span className="ai-label"><span className="live-dot" /> Live · updates automatically</span>
           </div>
 
           <div className="search-box shortlist-search">
@@ -275,18 +278,21 @@ export function Leaderboard({ job: initialJob, onBack, onJobChanged }) {
   const [busyId, setBusyId] = useState(null);
   const [statusBusy, setStatusBusy] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-    api.leaderboard(initialJob.id)
-      .then(data => {
-        if (!active) return;
-        setJob(data.job);
-        setCandidates(data.candidates);
-        setTotal(data.total);
-      })
-      .catch(err => active && setError(err.message));
-    return () => { active = false; };
+  const loadLeaderboard = useCallback(async () => {
+    try {
+      const data = await api.leaderboard(initialJob.id);
+      setJob(data.job);
+      setCandidates(data.candidates);
+      setTotal(data.total);
+      setError('');
+    } catch (err) {
+      setError(err.status === 404 ? 'This role no longer exists.' : err.message);
+    }
   }, [initialJob.id]);
+
+  useEffect(() => { loadLeaderboard(); }, [loadLeaderboard]);
+  // Keep the ranking live; pause while a shortlist/status change is being saved
+  usePolling(loadLeaderboard, 10000, !busyId && !statusBusy);
 
   const isClosed = job.status === 'Closed';
   const shortlistedCount = (candidates || []).filter(c => c.shortlisted).length;

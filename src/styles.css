@@ -2303,3 +2303,7 @@ button:disabled { opacity: .6; cursor: not-allowed; }
 .fit-row .next-step { color: var(--purple2); }
 .form-error svg { vertical-align: -2px; }
 @media (max-width: 560px) { .insights-cols { grid-template-columns: 1fr; } }
+
+/* ===== Live-update indicator (TPO dashboard) ===== */
+.live-dot { width: 7px; height: 7px; border-radius: 50%; background: #39a06b; display: inline-block; animation: live-pulse 2s ease-in-out infinite; }
+@keyframes live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }

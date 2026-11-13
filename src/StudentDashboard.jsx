@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { api } from './api.js';
 import AiSuggestions from './AiSuggestions.jsx';
+import { usePolling } from './usePolling.js';
 
 function Tag({ children, tone = '' }) {
   return <span className={`tag ${tone}`}>{children}</span>;
@@ -59,6 +60,11 @@ export function StudentDashboard({ jobs = [], user, onSelectJob }) {
 
     return () => { active = false; };
   }, [user]);
+
+  // Market Pulse follows the TPO's postings, so refresh it live as well
+  usePolling(() => {
+    api.demand().then(({ demand: rows }) => rows && setDemandList(rows.map(r => [r.skill, r.count]))).catch(() => {});
+  }, 15000);
 
   const handleNameChange = (e) => {
     const val = e.target.value;

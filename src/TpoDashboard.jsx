@@ -5,6 +5,9 @@ import {
 } from 'lucide-react';
 import { api } from './api.js';
 import { usePolling } from './usePolling.js';
+import StudentsSection, { DEFAULT_DIRECTORY_STATE } from './StudentsSection.jsx';
+import StudentProfileView from './StudentProfileView.jsx';
+import SkillGaps, { DEFAULT_GAP_OPTIONS } from './SkillGaps.jsx';
 
 function Tag({ children, tone = '' }) {
   return <span className={`tag ${tone}`}>{children}</span>;
@@ -14,7 +17,7 @@ function Loading({ label }) {
   return <div className="empty-state"><Loader2 size={16} className="spin" /> {label}</div>;
 }
 
-export function OfficerView({ jobs, reloadJobs, onSelectJob }) {
+export function OfficerView({ jobs, reloadJobs, onSelectJob, onOpenStudent }) {
   const [title, setTitle] = useState('');
   const [company, setCompany] = useState('');
   const [department, setDepartment] = useState('');
@@ -243,7 +246,9 @@ export function OfficerView({ jobs, reloadJobs, onSelectJob }) {
                         <span className="rank">{s.rank}</span>
                         <div className="candidate-info">
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <b>{s.name}</b>
+                            <button type="button" className="name-link" onClick={() => onOpenStudent?.(s.id)} title="Open full profile">
+                              {s.name}
+                            </button>
                             {s.shortlisted && (
                               <span className="mini-shortlist-badge">
                                 <Check size={10} /> Shortlisted
@@ -269,7 +274,7 @@ export function OfficerView({ jobs, reloadJobs, onSelectJob }) {
   );
 }
 
-export function Leaderboard({ job: initialJob, onBack, onJobChanged }) {
+export function Leaderboard({ job: initialJob, onBack, onJobChanged, onOpenStudent }) {
   const [viewTab, setViewTab] = useState('all');
   const [job, setJob] = useState(initialJob);
   const [candidates, setCandidates] = useState(null);
@@ -405,7 +410,9 @@ export function Leaderboard({ job: initialJob, onBack, onJobChanged }) {
             <span className="rank large">{s.rank}</span>
             <div className="candidate-info">
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                <b>{s.name}</b>
+                <button type="button" className="name-link" onClick={() => onOpenStudent?.(s.id)} title="Open full profile">
+                              {s.name}
+                            </button>
                 {s.shortlisted && (
                   <span className="mini-shortlist-badge">
                     <UserCheck size={11} /> Shortlisted
@@ -451,20 +458,95 @@ export function Leaderboard({ job: initialJob, onBack, onJobChanged }) {
   );
 }
 
-export function TpoDashboard({ jobs = [], reloadJobs }) {
-  const [selectedJob, setSelectedJob] = useState(null);
+const TABS = [
+  { id: 'roles', label: 'Roles & shortlists' },
+  { id: 'students', label: 'Students' },
+  { id: 'gaps', label: 'Skill gaps' },
+];
 
-  if (selectedJob) {
-    return (
+export function TpoDashboard({ jobs = [], reloadJobs }) {
+  const [tab, setTab] = useState('roles');
+  const [selectedJob, setSelectedJob] = useState(null);
+  // { id, back: { tab, job }, backLabel } — where "← Back" returns to
+  const [student, setStudent] = useState(null);
+  // Kept here so filters survive opening a profile and coming back
+  const [directoryState, setDirectoryState] = useState(DEFAULT_DIRECTORY_STATE);
+  const [gapOptions, setGapOptions] = useState(DEFAULT_GAP_OPTIONS);
+
+  useEffect(() => { window.scrollTo(0, 0); }, [tab, selectedJob, student]);
+
+  const switchTab = (id) => {
+    setTab(id);
+    setSelectedJob(null);
+    setStudent(null);
+  };
+
+  const openStudent = (id) => {
+    const backLabel = selectedJob
+      ? `${selectedJob.title} at ${selectedJob.company}`
+      : tab === 'students' ? 'students' : tab === 'gaps' ? 'skill gaps' : 'dashboard';
+    setStudent({ id, back: { tab, job: selectedJob }, backLabel });
+  };
+
+  const closeStudent = () => {
+    setTab(student.back.tab);
+    setSelectedJob(student.back.job);
+    setStudent(null);
+  };
+
+  const openJobFromProfile = (job) => {
+    setStudent(null);
+    setTab('roles');
+    setSelectedJob(job);
+  };
+
+  let content;
+  if (student) {
+    content = (
+      <StudentProfileView
+        key={student.id}
+        studentId={student.id}
+        backLabel={student.backLabel}
+        onBack={closeStudent}
+        onOpenJob={openJobFromProfile}
+      />
+    );
+  } else if (selectedJob) {
+    content = (
       <Leaderboard
+        key={selectedJob.id}
         job={selectedJob}
         onBack={() => setSelectedJob(null)}
         onJobChanged={reloadJobs}
+        onOpenStudent={openStudent}
       />
     );
+  } else if (tab === 'students') {
+    content = <StudentsSection state={directoryState} setState={setDirectoryState} onOpenStudent={openStudent} />;
+  } else if (tab === 'gaps') {
+    content = <SkillGaps options={gapOptions} setOptions={setGapOptions} onOpenStudent={openStudent} />;
+  } else {
+    content = <OfficerView jobs={jobs} reloadJobs={reloadJobs} onSelectJob={setSelectedJob} onOpenStudent={openStudent} />;
   }
 
-  return <OfficerView jobs={jobs} reloadJobs={reloadJobs} onSelectJob={setSelectedJob} />;
+  return (
+    <>
+      <nav className="tpo-tabs" aria-label="Placement officer sections">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            className={tab === t.id ? 'active' : ''}
+            aria-current={tab === t.id ? 'page' : undefined}
+            onClick={() => switchTab(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </nav>
+      {content}
+    </>
+  );
 }
 
 export default TpoDashboard;

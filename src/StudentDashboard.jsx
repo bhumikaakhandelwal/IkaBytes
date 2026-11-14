@@ -17,6 +17,8 @@ export function StudentDashboard({ jobs = [], user, onSelectJob }) {
   const [linkedin, setLinkedin] = useState('');
   const [skills, setSkills] = useState([]);
   const [certifications, setCertifications] = useState([]);
+  // Optional verification URL per certification: { [name]: url }
+  const [certLinks, setCertLinks] = useState({});
   const [projects, setProjects] = useState(['']);
   const [resume, setResume] = useState(null);
   const [extracted, setExtracted] = useState([]);
@@ -45,6 +47,7 @@ export function StudentDashboard({ jobs = [], user, onSelectJob }) {
         setDepartment(profile.department || '');
         setSkills(profile.skills || []);
         setCertifications(profile.certifications || []);
+        setCertLinks(Object.fromEntries((profile.certificationLinks || []).map(l => [l.name, l.url])));
         if (profile.projects && profile.projects.length > 0) {
           setProjects(profile.projects);
         }
@@ -143,6 +146,9 @@ export function StudentDashboard({ jobs = [], user, onSelectJob }) {
         cgpa: parsedCgpa,
         skills,
         certifications,
+        certificationLinks: certifications
+          .map(name => ({ name, url: (certLinks[name] || '').trim() }))
+          .filter(l => l.url),
         projects: cleanProjects,
       });
 
@@ -153,6 +159,7 @@ export function StudentDashboard({ jobs = [], user, onSelectJob }) {
         setDepartment(profile.department || '');
         setSkills(profile.skills || []);
         setCertifications(profile.certifications || []);
+        setCertLinks(Object.fromEntries((profile.certificationLinks || []).map(l => [l.name, l.url])));
         if (profile.projects && profile.projects.length > 0) {
           setProjects(profile.projects);
         }
@@ -339,6 +346,26 @@ export function StudentDashboard({ jobs = [], user, onSelectJob }) {
             hint="Include the issuer if helpful, e.g. “Google Data Analytics (Coursera)”."
             max={20}
           />
+
+          {certifications.length > 0 && (
+            <div className="credential-links">
+              <label>Credential links <span className="optional">(optional)</span></label>
+              <small className="field-hint">
+                Paste the verification link from Coursera, Credly, AWS, Google etc. so placement officers can verify your certificate.
+              </small>
+              {certifications.map(name => (
+                <div className="credential-row" key={name}>
+                  <span title={name}>{name}</span>
+                  <input
+                    type="url"
+                    placeholder="https://www.credly.com/badges/…"
+                    value={certLinks[name] || ''}
+                    onChange={e => { setCertLinks(cur => ({ ...cur, [name]: e.target.value })); setSaved(false); }}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
 
           <div className="project-links-full">
             <label>Project Links</label>

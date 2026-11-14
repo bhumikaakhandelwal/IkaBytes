@@ -3,7 +3,7 @@ import JobPosting, { serializeJob, JOB_STATUSES, ALL_DEPARTMENTS } from '../mode
 import StudentProfile from '../models/StudentProfile.js';
 import Application from '../models/Application.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
-import { normalizeList } from '../services/skills.js';
+import { normalizeSkills, skillKey } from '../services/skills.js';
 import { rankCandidates, scoreCandidate, evidenceLabel } from '../services/matching.js';
 import { asyncHandler, HttpError } from '../utils/asyncHandler.js';
 
@@ -64,7 +64,7 @@ router.get('/', asyncHandler(async (req, res) => {
 // POST /api/jobs  (TPO)  { title, company, department, description, skills, cgpaCutoff }
 router.post('/', requireRole('tpo'), asyncHandler(async (req, res) => {
   const { title, company, description = '', skills, department } = req.body;
-  const cleanSkills = normalizeList(skills, { max: 20 });
+  const cleanSkills = normalizeSkills(skills, { max: 20 });
   if (!title?.trim() || !company?.trim() || cleanSkills.length === 0) {
     throw new HttpError(400, 'Add a role title, company and at least one required skill.');
   }
@@ -117,7 +117,7 @@ router.patch('/:id', requireRole('tpo'), asyncHandler(async (req, res) => {
   if (company !== undefined) job.company = company;
   if (description !== undefined) job.description = description;
   if (department !== undefined) job.department = department || ALL_DEPARTMENTS;
-  if (skills !== undefined) job.skills = normalizeList(skills, { max: 20 });
+  if (skills !== undefined) job.skills = normalizeSkills(skills, { max: 20 });
   const cgpa = readCgpa(req.body);
   if (cgpa !== undefined) job.minCgpa = cgpa;
   if (status !== undefined) {
@@ -170,7 +170,7 @@ router.get('/:id/leaderboard', asyncHandler(async (req, res) => {
 
   // Profiles sharing at least one required skill (uses the skillIndex index),
   // plus anyone already shortlisted so they never disappear from the list.
-  const keys = job.skills.map((s) => s.toLowerCase());
+  const keys = [...new Set(job.skills.flatMap((s) => [s.toLowerCase(), skillKey(s)]))];
   const profiles = await StudentProfile.find({
     $or: [{ skillIndex: { $in: keys } }, { _id: { $in: job.shortlisted || [] } }],
   }).limit(1000).lean();

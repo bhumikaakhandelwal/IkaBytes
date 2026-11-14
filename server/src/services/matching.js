@@ -1,3 +1,5 @@
+import { skillKey } from './skills.js';
+
 // Candidate scoring. Uses the external AI service when AI_SERVICE_URL is set,
 // otherwise (or if that call fails) a transparent built-in scorer.
 
@@ -25,12 +27,13 @@ function statusFor(score) {
 
 /** Deterministic, explainable score for one profile against one job. */
 export function scoreCandidate(job, profile) {
+  // Compare by skillKey so "nodejs", "Node JS" and "Node.js" count as the same skill
   const have = new Set(
-    [...(profile.skills || []), ...(profile.extractedSkills || [])].map((s) => s.toLowerCase())
+    [...(profile.skills || []), ...(profile.extractedSkills || [])].map(skillKey)
   );
   const required = job.skills || [];
-  const matched = required.filter((r) => have.has(r.toLowerCase()));
-  const missing = required.filter((r) => !have.has(r.toLowerCase()));
+  const matched = required.filter((r) => have.has(skillKey(r)));
+  const missing = required.filter((r) => !have.has(skillKey(r)));
 
   const skillPart = required.length ? (matched.length / required.length) * SKILL_WEIGHT : 0;
   const evidencePart =

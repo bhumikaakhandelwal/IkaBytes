@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { skillKey } from '../services/skills.js';
 
 const studentProfileSchema = new mongoose.Schema(
   {
@@ -12,6 +13,8 @@ const studentProfileSchema = new mongoose.Schema(
     linkedin: { type: String, trim: true, default: '' },
     skills: { type: [String], default: [] },
     certifications: { type: [String], default: [] },
+    // Optional verification links for certifications, matched by name
+    certificationLinks: [{ _id: false, name: String, url: String }],
     projects: { type: [String], default: [] },
     resume: {
       path: { type: String, select: false },
@@ -48,7 +51,9 @@ const studentProfileSchema = new mongoose.Schema(
 );
 
 studentProfileSchema.pre('save', function buildSkillIndex(next) {
-  const all = [...(this.skills || []), ...(this.extractedSkills || [])].map((s) => s.toLowerCase().trim());
+  // Both the plain lower-case name and the standard key, so lookups work for any spelling
+  const all = [...(this.skills || []), ...(this.extractedSkills || [])]
+    .flatMap((s) => [String(s).toLowerCase().trim(), skillKey(s)]);
   this.skillIndex = [...new Set(all.filter(Boolean))];
   next();
 });
@@ -72,6 +77,7 @@ studentProfileSchema.methods.toPublic = function toPublic() {
     linkedin: this.linkedin,
     skills: this.skills,
     certifications: this.certifications,
+    certificationLinks: this.certificationLinks || [],
     projects: this.projects,
     extractedSkills: this.extractedSkills,
     resume: this.resume?.originalName

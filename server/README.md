@@ -50,6 +50,19 @@ All routes except register/login need `Authorization: Bearer <token>`.
 
 Set `AI_SERVICE_URL` to use the Python/FastAPI ranker instead (contract in `src/services/matching.js`); it falls back to the built-in scorer if the service is down.
 
+## Placement officer: Students & Skill gaps (TPO only)
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | /api/students?q=&department=&minCgpa=&skill=&hasResume=1&sort=name\|cgpa\|updated&page=1 | Student directory (20 per page) |
+| GET | /api/students/:id | Full profile, fit for every open role, applications, shortlists |
+| GET | /api/students/:id/resume | Resume file (PDFs open in the browser) |
+| GET | /api/analytics/skill-gaps?department=&scope=eligible\|all&includeClosed=1 | Skills the roles need vs. students who don't show them |
+| GET | /api/analytics/skill-gaps/:skill/students | Students who don't show a skill (for invites / CSV) |
+
+Skill names are standardised (`services/skills.js` → `SKILL_ALIASES`), so "nodejs", "Node JS" and "Node.js"
+count as the same skill everywhere. Add your own spellings to that list as needed.
+
 ## Notes
 
 - CGPA is self-reported (honor system).

@@ -32,6 +32,27 @@ async function request(path, { method = 'GET', body, form } = {}) {
   return data;
 }
 
+// Downloads a protected file (e.g. a student's resume) with the login token
+async function requestFile(path) {
+  const headers = {};
+  const token = tokenStore.get();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`${BASE}${path}`, { headers });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const err = new Error(data.error || `Request failed (${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
+  return res.blob();
+}
+
+// Builds "?a=1&b=2", skipping empty values
+function qs(params = {}) {
+  const clean = Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '' && v !== false);
+  return clean.length ? `?${new URLSearchParams(clean.map(([k, v]) => [k, v === true ? '1' : String(v)]))}` : '';
+}
+
 export const api = {
   register: (payload) => request('/auth/register', { method: 'POST', body: payload }),
   login: (payload) => request('/auth/login', { method: 'POST', body: payload }),
@@ -55,6 +76,15 @@ export const api = {
   toggleShortlist: (jobId, profileId) => request(`/jobs/${jobId}/shortlist`, { method: 'POST', body: { profileId } }),
 
   // AI suggestions (cached in the database; Groq is only called when something changed)
+  // Placement officer: student directory, full profiles and resumes
+  listStudents: (params) => request(`/students${qs(params)}`),
+  getStudent: (id) => request(`/students/${id}`),
+  studentResume: (id) => requestFile(`/students/${id}/resume`),
+
+  // Placement officer: skill-gap analytics
+  skillGaps: (params) => request(`/analytics/skill-gaps${qs(params)}`),
+  skillGapStudents: (key, params) => request(`/analytics/skill-gaps/${encodeURIComponent(key)}/students${qs(params)}`),
+
   getInsights: () => request('/profile/me/insights'),
   refreshInsights: () => request('/profile/me/insights/refresh', { method: 'POST' }),
 

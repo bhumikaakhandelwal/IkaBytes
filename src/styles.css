@@ -2745,9 +2745,9 @@ button:disabled {
 
 /* --- Section tabs --- */
 .tpo-tabs { max-width: 1450px; margin: 24px auto 0; padding: 0 36px; display: flex; gap: 6px; flex-wrap: wrap; }
-.tpo-tabs button { border: 1px solid var(--border); background: #fff; color: #6f5a7a; border-radius: 11px; padding: 11px 18px; font-size: 14px; font-weight: 700; }
-.tpo-tabs button:hover { background: #f7eff9; }
-.tpo-tabs button.active { background: var(--purple); border-color: var(--purple); color: #fff; }
+.tpo-tabs a { text-decoration: none; display: inline-block; border: 1px solid var(--border); background: #fff; color: #6f5a7a; border-radius: 11px; padding: 11px 18px; font-size: 14px; font-weight: 700; }
+.tpo-tabs a:hover { background: #f7eff9; }
+.tpo-tabs a.active { background: var(--purple); border-color: var(--purple); color: #fff; }
 .tpo-tabs + .workspace { padding-top: 26px; }
 
 /* Clickable student names (leaderboard, top matches, lists) */
@@ -2874,6 +2874,89 @@ button:disabled {
   .student-evidence { grid-column: 1 / -1; justify-items: start; text-align: left; }
   .credential-row { grid-template-columns: 1fr; }
   .tpo-tabs { padding: 0 15px; }
-  .tpo-tabs button { flex: 1; padding: 10px 8px; font-size: 13px; }
+  .tpo-tabs a { flex: 1; text-align: center; padding: 10px 8px; font-size: 13px; }
 }
 @media print { .tpo-tabs { display: none !important; } }
+
+/* =====================================================================
+   SkillMatch dropdown (src/Select.jsx) — replaces the browser's <select>
+   ===================================================================== */
+.sm-select { position: relative; width: 100%; }
+.sm-select-trigger {
+  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  border: 1px solid var(--border); border-radius: 14px; background: #fff;
+  padding: 13px 15px; font: inherit; font-size: 14px; color: var(--ink); text-align: left; cursor: pointer;
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+.sm-select-trigger > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sm-select-trigger.is-placeholder { color: #a493ad; }
+.sm-select-trigger:hover { border-color: #c8a6d6; }
+.sm-select-trigger:focus-visible, .sm-select.is-open .sm-select-trigger {
+  outline: none; border-color: #704080; box-shadow: 0 0 0 3px rgba(112, 64, 128, .12);
+}
+.sm-select-chevron { flex: none; color: #704080; transition: transform .2s ease; }
+.sm-select.is-open .sm-select-chevron { transform: rotate(180deg); }
+.sm-select.is-invalid .sm-select-trigger { border-color: #d9a3a3; box-shadow: 0 0 0 3px rgba(181, 77, 77, .1); }
+.sm-select.is-disabled .sm-select-trigger { opacity: .6; cursor: not-allowed; }
+
+.sm-select-list {
+  position: absolute; z-index: 50; left: 0; right: 0; top: calc(100% + 6px);
+  margin: 0; padding: 6px; list-style: none; max-height: 280px; overflow-y: auto;
+  background: #fff; border: 1px solid var(--border); border-radius: 14px;
+  box-shadow: 0 12px 30px rgba(56, 33, 67, .14), 0 2px 6px rgba(56, 33, 67, .06);
+  animation: sm-select-in .12s ease-out;
+}
+@keyframes sm-select-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.sm-select-list li {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 12px; border-radius: 9px; font-size: 14px; color: var(--ink); cursor: pointer;
+}
+.sm-select-list li.is-active { background: #f5edf8; }
+.sm-select-list li.is-selected { color: var(--purple); font-weight: 700; }
+.sm-select-list li svg { flex: none; color: var(--purple); }
+
+/* Student profile form: same size as the other profile inputs */
+.form-grid .sm-select { margin-top: 7px; }
+.form-grid .sm-select-trigger { padding: 13px 14px; border-radius: 9px; font-weight: 400; }
+/* Compact filter dropdowns (Students, Skill gaps) */
+.filter-select { width: auto; min-width: 190px; }
+.filter-select .sm-select-trigger { padding: 10px 12px; border-radius: 10px; }
+.filter-select .sm-select-list { min-width: 100%; width: max-content; max-width: 340px; }
+
+/* ===== Certifications editor (student profile): name + link or PDF, required ===== */
+.certs-editor { margin-top: 18px; display: grid; gap: 10px; }
+.certs-label { font-size: 13px; font-weight: 700; color: #66516f; }
+.certs-editor > .field-hint { margin-top: -4px; }
+.cert-row { border: 1px solid var(--border); border-radius: 13px; background: #fcf9fd; padding: 12px; display: grid; gap: 9px; }
+.cert-row.has-problem { border-color: #d9a3a3; background: #fdf7f7; }
+.cert-row-top { display: flex; align-items: center; gap: 8px; }
+.cert-row input.cert-name, .cert-row input.cert-proof {
+  width: 100%; border: 1px solid var(--border); border-radius: 9px; background: #fff;
+  padding: 11px 12px; font-size: 14px; color: var(--ink); outline: none;
+}
+.cert-row input:focus { border-color: #704080; box-shadow: 0 0 0 3px rgba(112, 64, 128, .12); }
+.cert-row .cert-name { flex: 1; min-width: 0; }
+.segmented.small { flex: none; }
+.segmented.small button { padding: 7px 10px; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
+.cert-remove { flex: none; width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--border); background: #fff; color: #8b6f99; display: grid; place-items: center; }
+.cert-remove:hover { background: #f7eff9; color: var(--purple); }
+.cert-file { position: relative; display: flex; align-items: center; gap: 10px; border: 1px dashed #c7a9d3; border-radius: 9px; background: #fff; padding: 8px 8px 8px 12px; color: #946eaa; cursor: pointer; }
+.cert-file:focus-within { outline: 3px solid #c9a9da; outline-offset: 2px; }
+.cert-file-name { flex: 1; min-width: 0; font-size: 13px; color: #634276; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upload-btn.small { margin-left: 0; padding: 8px 12px; font-size: 12px; display: inline-flex; align-items: center; gap: 5px; }
+.cert-add { justify-self: start; display: inline-flex; align-items: center; gap: 6px; border: 1px dashed #c7a9d3; background: #fff; color: var(--purple); border-radius: 10px; padding: 9px 14px; font-size: 13px; font-weight: 700; }
+.cert-add:hover { background: #f7eff9; }
+@media (max-width: 560px) { .cert-row-top { flex-wrap: wrap; } .cert-row .cert-name { flex-basis: 100%; } }
+.cert-file input[type="file"].file-input-hidden { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; clip: rect(0 0 0 0); margin: 0; padding: 0; }
+
+/* ===== Skill gaps chart in the app's purple palette (replaces red/green) ===== */
+.gap-bar { background: #f3edf5; }
+.gap-bar .have, .gap-legend i.have { background: #512568; }   /* show the skill: deep purple */
+.gap-bar .lack, .gap-legend i.lack { background: #d9c4e6; }   /* don't show it: soft lavender */
+.gap-bar .none { background: #eee7f1; }
+.gap-figure strong { color: #704080; }
+.gap-figure.covered strong { color: #a987be; }
+.trend-up { background: #512568; color: #fff; }
+.trend-down { background: #efe5f3; color: #78568a; }
+.trend-flat { background: #f5f0f7; color: #8f7b98; }
+.gaps-totals .missing-note { color: #8f6aa3; }

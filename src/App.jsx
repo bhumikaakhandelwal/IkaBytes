@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import {
   Sparkles, GraduationCap, BriefcaseBusiness, ArrowRight, LogOut, Loader2
 } from 'lucide-react';
@@ -175,7 +176,11 @@ export function Header({ user, onLogout }) {
   );
 }
 
+// Where each role lands after login
+const homeFor = (user) => (user.role === 'tpo' || user.role === 'Placement officer' ? '/tpo/roles' : '/student');
+
 export function App() {
+  const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [checking, setChecking] = useState(Boolean(tokenStore.get()));
   const [jobs, setJobs] = useState([]);
@@ -220,6 +225,7 @@ export function App() {
     tokenStore.clear();
     setUser(null);
     setJobs([]);
+    navigate('/', { replace: true });
   };
 
   if (checking) {
@@ -230,6 +236,8 @@ export function App() {
     );
   }
 
+  // Not signed in: the login shows on whatever address was opened. After login that same
+  // address renders, so a reloaded or bookmarked page (e.g. /tpo/skill-gaps) opens directly.
   if (!user) return <Login onLogin={setUser} />;
 
   const isOfficer = user.role === 'tpo' || user.role === 'Placement officer';
@@ -238,17 +246,19 @@ export function App() {
     <div className="app-shell">
       <Header user={user} onLogout={handleLogout} />
       {jobsError && <p className="form-error" style={{ textAlign: 'center', marginTop: '12px' }}>{jobsError}</p>}
-      {isOfficer ? (
-        <TpoDashboard
-          jobs={jobs}
-          reloadJobs={reloadJobs}
+      <Routes>
+        <Route path="/" element={<Navigate to={homeFor(user)} replace />} />
+        <Route
+          path="/student"
+          element={isOfficer ? <Navigate to={homeFor(user)} replace /> : <StudentDashboard jobs={jobs} user={user} />}
         />
-      ) : (
-        <StudentDashboard
-          jobs={jobs}
-          user={user}
+        <Route
+          path="/tpo/*"
+          element={isOfficer ? <TpoDashboard jobs={jobs} reloadJobs={reloadJobs} /> : <Navigate to={homeFor(user)} replace />}
         />
-      )}
+        {/* Unknown address → the user's home page */}
+        <Route path="*" element={<Navigate to={homeFor(user)} replace />} />
+      </Routes>
       <footer className="app-footer">SkillMatch <span>·</span> Placement intelligence</footer>
     </div>
   );

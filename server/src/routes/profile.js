@@ -3,8 +3,9 @@ import { Router } from 'express';
 import StudentProfile from '../models/StudentProfile.js';
 import User from '../models/User.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
-import { resumeUpload } from '../middleware/upload.js';
-import { normalizeList, normalizeSkills, safeUrl, extractSkillsFromText, parseResumeText } from '../services/skills.js';
+import { resumeUpload, certificateUpload } from '../middleware/upload.js';
+import { proofsFor, cleanProofs, removeUnusedCertFiles } from '../services/certificates.js';
+import { normalizeList, normalizeSkills, extractSkillsFromText, parseResumeText } from '../services/skills.js';
 import { queueAnalysis, isStale } from '../services/insights.js';
 import { isLLMConfigured } from '../services/llm.js';
 import { asyncHandler, HttpError } from '../utils/asyncHandler.js';
@@ -34,10 +35,10 @@ router.get('/me', requireAuth, requireRole('student'), asyncHandler(async (req, 
   res.json({ profile: profile.toPublic() });
 }));
 
-// PUT /api/profile/me  { name, department, cgpa, linkedin, skills, certifications, projects }
+// PUT /api/profile/me  { name, department, cgpa, linkedin, skills, certificationProofs: [{ name, url | fileKey }], projects }
 router.put('/me', requireAuth, requireRole('student'), asyncHandler(async (req, res) => {
   const profile = await getOrCreateProfile(req.user.id);
-  const { name, department, cgpa, linkedin, skills, certifications, certificationLinks, projects } = req.body;
+  const { name, department, cgpa, linkedin, skills, certifications, certificationProofs, projects } = req.body;
 
   if (name !== undefined) profile.name = String(name).trim().slice(0, 120);
   if (department !== undefined) profile.department = String(department).trim().slice(0, 120);
@@ -51,16 +52,18 @@ router.put('/me', requireAuth, requireRole('student'), asyncHandler(async (req, 
     }
   }
   if (skills !== undefined) profile.skills = normalizeSkills(skills);
-  if (certifications !== undefined) profile.certifications = normalizeList(certifications, { max: 20 });
-  if (certificationLinks !== undefined || certifications !== undefined) {
-    // Keep only links for certifications that still exist, and only real http(s) URLs
-    const incoming = Array.isArray(certificationLinks) ? certificationLinks : profile.certificationLinks || [];
-    const names = new Set(profile.certifications.map((c) => c.toLowerCase()));
-    const bad = incoming.filter((l) => l?.url && !safeUrl(l.url)).map((l) => l.name);
-    if (bad.length) throw new HttpError(400, `Credential link for "${bad[0]}" is not a valid web address.`);
-    profile.certificationLinks = incoming
-      .filter((l) => l?.name && names.has(String(l.name).toLowerCase()) && safeUrl(l.url))
-      .map((l) => ({ name: String(l.name).slice(0, 200), url: safeUrl(l.url) }));
+  if (certificationProofs !== undefined || certifications !== undefined) {
+    // Every certification needs proof: a credential link or an uploaded PDF (no "add later")
+    const previous = proofsFor(profile);
+    const submitted = certificationProofs !== undefined
+      ? certificationProofs
+      // Older clients send only names: keep their existing proof (and reject any without one)
+      : normalizeList(certifications, { max: 20 }).map((name) => previous.find((p) => p.name.toLowerCase() === name.toLowerCase()) || { name });
+    const proofs = cleanProofs(submitted, req.user.id, previous);
+    profile.certifications = proofs.map((p) => p.name);
+    profile.certificationProofs = proofs;
+    profile.certificationLinks = [];
+    removeUnusedCertFiles(req.user.id, proofs);
   }
   if (projects !== undefined) profile.projects = normalizeList(projects, { max: 20 });
 
@@ -68,6 +71,19 @@ router.put('/me', requireAuth, requireRole('student'), asyncHandler(async (req, 
   if (name !== undefined) await User.updateOne({ _id: req.user.id }, { name: profile.name });
   await respondWithAnalysis(res, profile._id);
 }));
+
+// POST /api/profile/me/certificates/file  (multipart, field "certificate", PDF up to 5 MB)
+// Stores the PDF and returns its fileKey; it is attached to a certification when the profile is saved.
+router.post(
+  '/me/certificates/file',
+  requireAuth,
+  requireRole('student'),
+  certificateUpload.single('certificate'),
+  asyncHandler(async (req, res) => {
+    if (!req.file) throw new HttpError(400, 'Choose a PDF to upload.');
+    res.status(201).json({ fileKey: req.file.filename, fileName: req.file.originalname.slice(0, 200) });
+  })
+);
 
 // POST /api/profile/me/resume  (multipart/form-data, field "resume")
 router.post(

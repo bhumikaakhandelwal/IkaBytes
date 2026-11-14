@@ -7,6 +7,7 @@ import JobPosting, { serializeJob } from '../models/JobPosting.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { scoreCandidate } from '../services/matching.js';
 import { safeUrl, skillKey } from '../services/skills.js';
+import { proofsFor, certFileExists, certFilePath } from '../services/certificates.js';
 import { asyncHandler, HttpError } from '../utils/asyncHandler.js';
 
 const router = Router();
@@ -108,7 +109,6 @@ router.get('/:id', asyncHandler(async (req, res) => {
     JobPosting.find({ shortlisted: p._id }).select('title company status').lean(),
   ]);
 
-  const linkByName = new Map((p.certificationLinks || []).map((l) => [String(l.name).toLowerCase(), safeUrl(l.url)]));
   const listedKeys = new Set((p.skills || []).map(skillKey));
   const resumeAvailable = Boolean(p.resume?.path && fs.existsSync(p.resume.path));
 
@@ -124,7 +124,12 @@ router.get('/:id', asyncHandler(async (req, res) => {
       skillsListed: p.skills || [],
       // Found by the resume reader but not typed by the student
       skillsFromResume: (p.extractedSkills || []).filter((s) => !listedKeys.has(skillKey(s))),
-      certifications: (p.certifications || []).map((name) => ({ name, url: linkByName.get(name.toLowerCase()) || '' })),
+      // Each certification with its proof: a credential link or an uploaded PDF
+      certifications: proofsFor(p).map((c) => ({
+        name: c.name,
+        url: safeUrl(c.url),
+        file: c.fileKey ? { key: c.fileKey, name: c.fileName, available: certFileExists(c.fileKey) } : null,
+      })),
       projects: (p.projects || []).map((raw) => ({ raw, url: safeUrl(raw) })),
       resume: p.resume?.originalName
         ? {
@@ -169,6 +174,21 @@ router.get('/:id/resume', asyncHandler(async (req, res) => {
   res.setHeader('Content-Disposition', `${isPdf ? 'inline' : 'attachment'}; filename="${safeName}"`);
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.sendFile(path.resolve(p.resume.path));
+}));
+
+// GET /api/students/:id/certificates/:fileKey — a certificate PDF uploaded by the student
+router.get('/:id/certificates/:fileKey', asyncHandler(async (req, res) => {
+  const p = await StudentProfile.findById(req.params.id).select('certificationProofs').lean();
+  const proof = (p?.certificationProofs || []).find((c) => c.fileKey && c.fileKey === req.params.fileKey);
+  if (!proof) throw new HttpError(404, 'Certificate not found.');
+  if (!certFileExists(proof.fileKey)) {
+    throw new HttpError(404, 'Certificate file is not on this server (it may have been uploaded on another computer). Ask the student to upload it again.');
+  }
+  const safeName = (proof.fileName || 'certificate.pdf').replace(/[^\w.\- ]+/g, '_');
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="${safeName}"`);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.sendFile(certFilePath(proof.fileKey));
 }));
 
 export default router;

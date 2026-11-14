@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Search, Loader2, FileText, AlertTriangle, ChevronLeft, ChevronRight, Users } from 'lucide-react';
 import { api } from './api.js';
+import Select from './Select.jsx';
 
 function Tag({ children, tone = '' }) {
   return <span className={`tag ${tone}`}>{children}</span>;
@@ -60,10 +61,13 @@ export default function StudentsSection({ state, setState, onOpenStudent }) {
             <Search size={15} />
             <input placeholder="Search name or email" value={qDraft} onChange={(e) => setQDraft(e.target.value)} />
           </div>
-          <select value={state.department} onChange={(e) => update({ department: e.target.value })}>
-            <option value="">All departments</option>
-            {(data?.departments || []).map((d) => <option key={d} value={d}>{d}</option>)}
-          </select>
+          <Select
+            className="filter-select"
+            value={state.department}
+            onChange={(v) => update({ department: v })}
+            ariaLabel="Department"
+            options={[{ value: '', label: 'All departments' }, ...(data?.departments || [])]}
+          />
           <input
             type="number" min="0" max="10" step="0.1" placeholder="Min CGPA"
             value={state.minCgpa} onChange={(e) => update({ minCgpa: e.target.value })}
@@ -73,11 +77,17 @@ export default function StudentsSection({ state, setState, onOpenStudent }) {
             <input type="checkbox" checked={state.hasResume} onChange={(e) => update({ hasResume: e.target.checked })} />
             Has resume
           </label>
-          <select value={state.sort} onChange={(e) => update({ sort: e.target.value })} aria-label="Sort by">
-            <option value="name">Sort: Name</option>
-            <option value="cgpa">Sort: CGPA (high → low)</option>
-            <option value="updated">Sort: Recently updated</option>
-          </select>
+          <Select
+            className="filter-select"
+            value={state.sort}
+            onChange={(v) => update({ sort: v })}
+            ariaLabel="Sort by"
+            options={[
+              { value: 'name', label: 'Sort: Name' },
+              { value: 'cgpa', label: 'Sort: CGPA (high → low)' },
+              { value: 'updated', label: 'Sort: Recently updated' },
+            ]}
+          />
           {filtersOn && (
             <button type="button" className="text-link" onClick={() => { setQDraft(''); setSkillDraft(''); setState(DEFAULT_DIRECTORY_STATE); }}>
               Clear filters

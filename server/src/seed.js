@@ -48,7 +48,11 @@ async function seed() {
   for (const s of students) {
     const user = await User.create({ name: s.name, email: s.email, role: 'student', passwordHash });
     const { email, ...profile } = s;
-    await StudentProfile.create({ ...profile, email, user: user._id });
+    // Every certification needs proof (a link or a PDF); demo data uses sample links
+    const certificationProofs = (profile.certifications || []).map((name) => ({
+      name, url: `https://www.credly.com/badges/demo-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+    }));
+    await StudentProfile.create({ ...profile, certificationProofs, email, user: user._id });
   }
   await JobPosting.insertMany(jobs.map((j) => ({ ...j, postedBy: officer._id })));
 

@@ -5,6 +5,9 @@ import {
 import { api } from './api.js';
 import AiSuggestions from './AiSuggestions.jsx';
 import TagInput from './TagInput.jsx';
+import CertificationsEditor, { rowsFromProfile, rowProblem, rowsToPayload } from './CertificationsEditor.jsx';
+import Select from './Select.jsx';
+import { DEPARTMENTS } from './departments.js';
 import { usePolling } from './usePolling.js';
 
 function Tag({ children, tone = '' }) {
@@ -16,9 +19,9 @@ export function StudentDashboard({ jobs = [], user, onSelectJob }) {
   const [nameError, setNameError] = useState('');
   const [linkedin, setLinkedin] = useState('');
   const [skills, setSkills] = useState([]);
-  const [certifications, setCertifications] = useState([]);
-  // Optional verification URL per certification: { [name]: url }
-  const [certLinks, setCertLinks] = useState({});
+  // Each certification row: name + proof (credential link or uploaded PDF)
+  const [certRows, setCertRows] = useState([]);
+  const [showCertErrors, setShowCertErrors] = useState(false);
   const [projects, setProjects] = useState(['']);
   const [resume, setResume] = useState(null);
   const [extracted, setExtracted] = useState([]);
@@ -46,8 +49,7 @@ export function StudentDashboard({ jobs = [], user, onSelectJob }) {
         setCgpa(profile.cgpa != null ? String(profile.cgpa) : '');
         setDepartment(profile.department || '');
         setSkills(profile.skills || []);
-        setCertifications(profile.certifications || []);
-        setCertLinks(Object.fromEntries((profile.certificationLinks || []).map(l => [l.name, l.url])));
+        setCertRows(rowsFromProfile(profile));
         if (profile.projects && profile.projects.length > 0) {
           setProjects(profile.projects);
         }
@@ -131,6 +133,13 @@ export function StudentDashboard({ jobs = [], user, onSelectJob }) {
         return;
       }
     }
+    // Every certification needs its link or PDF before the profile can be saved
+    if (certRows.some(r => rowProblem(r))) {
+      setShowCertErrors(true);
+      setSaveError('Each certification needs a credential link or an uploaded PDF. Fix the highlighted certifications to save.');
+      return;
+    }
+    setShowCertErrors(false);
     setNameError('');
     setCgpaError('');
     setSaveError('');
@@ -145,10 +154,7 @@ export function StudentDashboard({ jobs = [], user, onSelectJob }) {
         linkedin: linkedin.trim(),
         cgpa: parsedCgpa,
         skills,
-        certifications,
-        certificationLinks: certifications
-          .map(name => ({ name, url: (certLinks[name] || '').trim() }))
-          .filter(l => l.url),
+        certificationProofs: rowsToPayload(certRows),
         projects: cleanProjects,
       });
 
@@ -158,8 +164,7 @@ export function StudentDashboard({ jobs = [], user, onSelectJob }) {
         setCgpa(profile.cgpa != null ? String(profile.cgpa) : '');
         setDepartment(profile.department || '');
         setSkills(profile.skills || []);
-        setCertifications(profile.certifications || []);
-        setCertLinks(Object.fromEntries((profile.certificationLinks || []).map(l => [l.name, l.url])));
+        setCertRows(rowsFromProfile(profile));
         if (profile.projects && profile.projects.length > 0) {
           setProjects(profile.projects);
         }
@@ -291,40 +296,13 @@ export function StudentDashboard({ jobs = [], user, onSelectJob }) {
 
             <label>
               Department
-              <select
+              <Select
                 value={department}
-                onChange={e => {
-                  setDepartment(e.target.value);
-                  setSaved(false);
-                }}
-                required
-                className={!department ? 'is-placeholder' : ''}
-              >
-                <option value="" disabled>
-                  Select your department
-                </option>
-                <option value="Computer Engineering">
-                  Computer Engineering
-                </option>
-                <option value="Information Technology">
-                  Information Technology
-                </option>
-                <option value="Electronics and Computer Science Engineering">
-                  Electronics and Computer Science Engineering
-                </option>
-                <option value="Electronics">
-                  Electronics
-                </option>
-                <option value="Mechanical Engineering">
-                  Mechanical Engineering
-                </option>
-                <option value="Civil Engineering">
-                  Civil Engineering
-                </option>
-                {department && !['Computer Engineering', 'Information Technology', 'Electronics and Computer Science Engineering', 'Electronics', 'Mechanical Engineering', 'Civil Engineering'].includes(department) && (
-                  <option value={department}>{department}</option>
-                )}
-              </select>
+                onChange={(v) => { setDepartment(v); setSaved(false); }}
+                placeholder="Select your department"
+                ariaLabel="Department"
+                options={DEPARTMENTS.includes(department) || !department ? DEPARTMENTS : [...DEPARTMENTS, department]}
+              />
             </label>
           </div>
 
@@ -338,34 +316,11 @@ export function StudentDashboard({ jobs = [], user, onSelectJob }) {
             suggestionLabel="Found in your resume:"
           />
 
-          <TagInput
-            label="Certifications"
-            values={certifications}
-            onChange={(v) => { setCertifications(v); setSaved(false); }}
-            placeholder="e.g. AWS Cloud Practitioner — press Enter after each"
-            hint="Include the issuer if helpful, e.g. “Google Data Analytics (Coursera)”."
-            max={20}
+          <CertificationsEditor
+            rows={certRows}
+            onChange={(rows) => { setCertRows(rows); setSaved(false); }}
+            showErrors={showCertErrors}
           />
-
-          {certifications.length > 0 && (
-            <div className="credential-links">
-              <label>Credential links <span className="optional">(optional)</span></label>
-              <small className="field-hint">
-                Paste the verification link from Coursera, Credly, AWS, Google etc. so placement officers can verify your certificate.
-              </small>
-              {certifications.map(name => (
-                <div className="credential-row" key={name}>
-                  <span title={name}>{name}</span>
-                  <input
-                    type="url"
-                    placeholder="https://www.credly.com/badges/…"
-                    value={certLinks[name] || ''}
-                    onChange={e => { setCertLinks(cur => ({ ...cur, [name]: e.target.value })); setSaved(false); }}
-                  />
-                </div>
-              ))}
-            </div>
-          )}
 
           <div className="project-links-full">
             <label>Project Links</label>

@@ -1,10 +1,15 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Routes, Route, Navigate, NavLink, useNavigate, useParams, useLocation, useSearchParams } from 'react-router-dom';
 import {
   Sparkles, Users, ChevronDown, ArrowRight, Plus, Search, Check,
   Unlock, Lock, UserCheck, Download, Loader2, AlertTriangle
 } from 'lucide-react';
 import { api } from './api.js';
 import { usePolling } from './usePolling.js';
+import Select from './Select.jsx';
+import { DEPARTMENTS, ALL_DEPARTMENTS } from './departments.js';
+
+const DEPT_REQUIRED = 'Select the eligible department for this role.';
 import StudentsSection, { DEFAULT_DIRECTORY_STATE } from './StudentsSection.jsx';
 import StudentProfileView from './StudentProfileView.jsx';
 import SkillGaps, { DEFAULT_GAP_OPTIONS } from './SkillGaps.jsx';
@@ -65,6 +70,10 @@ export function OfficerView({ jobs, reloadJobs, onSelectJob, onOpenStudent }) {
   const post = async (e) => {
     e.preventDefault();
     const cleanSkills = skills.split(',').map(s => s.trim()).filter(Boolean);
+    if (!department) {
+      setNotice(DEPT_REQUIRED);
+      return;
+    }
     if (!title.trim() || !company.trim() || cleanSkills.length === 0) {
       setNotice('Add a role title, company and at least one required skill.');
       return;
@@ -141,21 +150,17 @@ export function OfficerView({ jobs, reloadJobs, onSelectJob, onOpenStudent }) {
               onChange={e => { setCompany(e.target.value); setNotice(''); }}
               required
             />
-            <select
+            <Select
               value={department}
-              onChange={e => { setDepartment(e.target.value); setNotice(''); }}
-              className={!department ? 'is-placeholder' : ''}
-              required
-            >
-              <option value="">Select eligible department</option>
-              <option value="All Departments">All Departments (Open to All)</option>
-              <option value="Computer Engineering">Computer Engineering</option>
-              <option value="Information Technology">Information Technology</option>
-              <option value="Electronics and Computer Science Engineering">Electronics and Computer Science Engineering</option>
-              <option value="Electronics">Electronics</option>
-              <option value="Mechanical Engineering">Mechanical Engineering</option>
-              <option value="Civil Engineering">Civil Engineering</option>
-            </select>
+              onChange={(v) => { setDepartment(v); setNotice(''); }}
+              placeholder="Select eligible department"
+              ariaLabel="Eligible department"
+              invalid={notice === DEPT_REQUIRED}
+              options={[
+                { value: ALL_DEPARTMENTS, label: 'All Departments (Open to All)' },
+                ...DEPARTMENTS,
+              ]}
+            />
             <div>
               <input
                 type="number"
@@ -246,7 +251,7 @@ export function OfficerView({ jobs, reloadJobs, onSelectJob, onOpenStudent }) {
                         <span className="rank">{s.rank}</span>
                         <div className="candidate-info">
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <button type="button" className="name-link" onClick={() => onOpenStudent?.(s.id)} title="Open full profile">
+                            <button type="button" className="name-link" onClick={() => onOpenStudent?.(s.id, 'roles & shortlists')} title="Open full profile">
                               {s.name}
                             </button>
                             {s.shortlisted && (
@@ -274,9 +279,9 @@ export function OfficerView({ jobs, reloadJobs, onSelectJob, onOpenStudent }) {
   );
 }
 
-export function Leaderboard({ job: initialJob, onBack, onJobChanged, onOpenStudent }) {
+export function Leaderboard({ jobId, initialJob, onBack, onJobChanged, onOpenStudent }) {
   const [viewTab, setViewTab] = useState('all');
-  const [job, setJob] = useState(initialJob);
+  const [job, setJob] = useState(initialJob || null);
   const [candidates, setCandidates] = useState(null);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState('');
@@ -285,7 +290,7 @@ export function Leaderboard({ job: initialJob, onBack, onJobChanged, onOpenStude
 
   const loadLeaderboard = useCallback(async () => {
     try {
-      const data = await api.leaderboard(initialJob.id);
+      const data = await api.leaderboard(jobId);
       setJob(data.job);
       setCandidates(data.candidates);
       setTotal(data.total);
@@ -293,13 +298,13 @@ export function Leaderboard({ job: initialJob, onBack, onJobChanged, onOpenStude
     } catch (err) {
       setError(err.status === 404 ? 'This role no longer exists.' : err.message);
     }
-  }, [initialJob.id]);
+  }, [jobId]);
 
   useEffect(() => { loadLeaderboard(); }, [loadLeaderboard]);
   // Keep the ranking live; pause while a shortlist/status change is being saved
   usePolling(loadLeaderboard, 10000, !busyId && !statusBusy);
 
-  const isClosed = job.status === 'Closed';
+  const isClosed = job?.status === 'Closed';
   const shortlistedCount = (candidates || []).filter(c => c.shortlisted).length;
 
   const toggleShortlist = async (candidate) => {
@@ -333,9 +338,19 @@ export function Leaderboard({ job: initialJob, onBack, onJobChanged, onOpenStude
 
   const displayedCandidates = (candidates || []).filter(c => viewTab === 'all' || c.shortlisted);
 
+  // Opened by address (e.g. after a reload): wait for the job to load
+  if (!job) {
+    return (
+      <div className="workspace leaderboard-workspace">
+        <button className="back-link" onClick={onBack}>← Back to roles</button>
+        {error ? <p className="form-error">{error}</p> : <Loading label="Loading role…" />}
+      </div>
+    );
+  }
+
   return (
     <div className="workspace leaderboard-workspace">
-      <button className="back-link" onClick={onBack}>← Back to dashboard</button>
+      <button className="back-link" onClick={onBack}>← Back to roles</button>
       <div className="page-heading">
         <div>
           <p className="eyebrow">JOB-SPECIFIC LEADERBOARD</p>
@@ -410,7 +425,7 @@ export function Leaderboard({ job: initialJob, onBack, onJobChanged, onOpenStude
             <span className="rank large">{s.rank}</span>
             <div className="candidate-info">
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                <button type="button" className="name-link" onClick={() => onOpenStudent?.(s.id)} title="Open full profile">
+                <button type="button" className="name-link" onClick={() => onOpenStudent?.(s.id, `${job.title} at ${job.company}`)} title="Open full profile">
                               {s.name}
                             </button>
                 {s.shortlisted && (
@@ -459,92 +474,134 @@ export function Leaderboard({ job: initialJob, onBack, onJobChanged, onOpenStude
 }
 
 const TABS = [
-  { id: 'roles', label: 'Roles & shortlists' },
-  { id: 'students', label: 'Students' },
-  { id: 'gaps', label: 'Skill gaps' },
+  { to: '/tpo/roles', label: 'Roles & shortlists' },
+  { to: '/tpo/students', label: 'Students' },
+  { to: '/tpo/skill-gaps', label: 'Skill gaps' },
 ];
 
+/**
+ * Keeps a page's filters in the address bar (e.g. /tpo/students?department=Electronics&page=2),
+ * so reloading or pressing Back restores them. Values equal to the defaults are left out.
+ */
+function useQueryState(defaults) {
+  const [params, setParams] = useSearchParams();
+  const state = useMemo(() => {
+    const out = { ...defaults };
+    for (const key of Object.keys(defaults)) {
+      const raw = params.get(key);
+      if (raw === null) continue;
+      if (typeof defaults[key] === 'boolean') out[key] = raw === '1';
+      else if (typeof defaults[key] === 'number') out[key] = Number(raw) || defaults[key];
+      else out[key] = raw;
+    }
+    return out;
+  }, [params]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const setState = useCallback((update) => {
+    const next = typeof update === 'function' ? update(state) : update;
+    const p = new URLSearchParams();
+    for (const [key, value] of Object.entries(next)) {
+      if (value === defaults[key] || value === '' || value === false || value == null) continue;
+      p.set(key, value === true ? '1' : String(value));
+    }
+    setParams(p, { replace: true });
+  }, [state, setParams]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return [state, setState];
+}
+
+/** Opens a student's profile and remembers where "← Back" should return to. */
+function useOpenStudent() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  return useCallback((id, fromLabel) => {
+    navigate(`/tpo/students/${id}`, {
+      state: { from: location.pathname + location.search, fromLabel: fromLabel || 'students' },
+    });
+  }, [navigate, location]);
+}
+
+function RolesPage({ jobs, reloadJobs }) {
+  const navigate = useNavigate();
+  const openStudent = useOpenStudent();
+  return (
+    <OfficerView
+      jobs={jobs}
+      reloadJobs={reloadJobs}
+      onSelectJob={(job) => navigate(`/tpo/roles/${job.id}`)}
+      onOpenStudent={openStudent}
+    />
+  );
+}
+
+function LeaderboardPage({ jobs, reloadJobs }) {
+  const { jobId } = useParams();
+  const navigate = useNavigate();
+  const openStudent = useOpenStudent();
+  return (
+    <Leaderboard
+      key={jobId}
+      jobId={jobId}
+      initialJob={jobs.find((j) => j.id === jobId)}
+      onBack={() => navigate('/tpo/roles')}
+      onJobChanged={reloadJobs}
+      onOpenStudent={openStudent}
+    />
+  );
+}
+
+function StudentsPage() {
+  const [state, setState] = useQueryState(DEFAULT_DIRECTORY_STATE);
+  const openStudent = useOpenStudent();
+  return <StudentsSection state={state} setState={setState} onOpenStudent={(id) => openStudent(id, 'students')} />;
+}
+
+function StudentProfilePage() {
+  const { studentId } = useParams();
+  const navigate = useNavigate();
+  const { state } = useLocation();
+  // Came from inside the app → go back there; opened directly → the directory
+  const backTo = state?.from || '/tpo/students';
+  const backLabel = state?.fromLabel || 'students';
+  return (
+    <StudentProfileView
+      key={studentId}
+      studentId={studentId}
+      backLabel={backLabel}
+      onBack={() => navigate(backTo)}
+      onOpenJob={(job) => navigate(`/tpo/roles/${job.id}`)}
+    />
+  );
+}
+
+function SkillGapsPage() {
+  const [options, setOptions] = useQueryState(DEFAULT_GAP_OPTIONS);
+  const openStudent = useOpenStudent();
+  return <SkillGaps options={options} setOptions={setOptions} onOpenStudent={(id) => openStudent(id, 'skill gaps')} />;
+}
+
 export function TpoDashboard({ jobs = [], reloadJobs }) {
-  const [tab, setTab] = useState('roles');
-  const [selectedJob, setSelectedJob] = useState(null);
-  // { id, back: { tab, job }, backLabel } — where "← Back" returns to
-  const [student, setStudent] = useState(null);
-  // Kept here so filters survive opening a profile and coming back
-  const [directoryState, setDirectoryState] = useState(DEFAULT_DIRECTORY_STATE);
-  const [gapOptions, setGapOptions] = useState(DEFAULT_GAP_OPTIONS);
-
-  useEffect(() => { window.scrollTo(0, 0); }, [tab, selectedJob, student]);
-
-  const switchTab = (id) => {
-    setTab(id);
-    setSelectedJob(null);
-    setStudent(null);
-  };
-
-  const openStudent = (id) => {
-    const backLabel = selectedJob
-      ? `${selectedJob.title} at ${selectedJob.company}`
-      : tab === 'students' ? 'students' : tab === 'gaps' ? 'skill gaps' : 'dashboard';
-    setStudent({ id, back: { tab, job: selectedJob }, backLabel });
-  };
-
-  const closeStudent = () => {
-    setTab(student.back.tab);
-    setSelectedJob(student.back.job);
-    setStudent(null);
-  };
-
-  const openJobFromProfile = (job) => {
-    setStudent(null);
-    setTab('roles');
-    setSelectedJob(job);
-  };
-
-  let content;
-  if (student) {
-    content = (
-      <StudentProfileView
-        key={student.id}
-        studentId={student.id}
-        backLabel={student.backLabel}
-        onBack={closeStudent}
-        onOpenJob={openJobFromProfile}
-      />
-    );
-  } else if (selectedJob) {
-    content = (
-      <Leaderboard
-        key={selectedJob.id}
-        job={selectedJob}
-        onBack={() => setSelectedJob(null)}
-        onJobChanged={reloadJobs}
-        onOpenStudent={openStudent}
-      />
-    );
-  } else if (tab === 'students') {
-    content = <StudentsSection state={directoryState} setState={setDirectoryState} onOpenStudent={openStudent} />;
-  } else if (tab === 'gaps') {
-    content = <SkillGaps options={gapOptions} setOptions={setGapOptions} onOpenStudent={openStudent} />;
-  } else {
-    content = <OfficerView jobs={jobs} reloadJobs={reloadJobs} onSelectJob={setSelectedJob} onOpenStudent={openStudent} />;
-  }
+  const { pathname } = useLocation();
+  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
 
   return (
     <>
       <nav className="tpo-tabs" aria-label="Placement officer sections">
         {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            className={tab === t.id ? 'active' : ''}
-            aria-current={tab === t.id ? 'page' : undefined}
-            onClick={() => switchTab(t.id)}
-          >
+          <NavLink key={t.to} to={t.to} className={({ isActive }) => (isActive ? 'active' : '')}>
             {t.label}
-          </button>
+          </NavLink>
         ))}
       </nav>
-      {content}
+      <Routes>
+        <Route index element={<Navigate to="roles" replace />} />
+        <Route path="roles" element={<RolesPage jobs={jobs} reloadJobs={reloadJobs} />} />
+        <Route path="roles/:jobId" element={<LeaderboardPage jobs={jobs} reloadJobs={reloadJobs} />} />
+        <Route path="students" element={<StudentsPage />} />
+        <Route path="students/:studentId" element={<StudentProfilePage />} />
+        <Route path="skill-gaps" element={<SkillGapsPage />} />
+        <Route path="*" element={<Navigate to="roles" replace />} />
+      </Routes>
     </>
   );
 }

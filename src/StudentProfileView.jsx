@@ -62,6 +62,25 @@ export default function StudentProfileView({ studentId, backLabel, onBack, onOpe
     }
   };
 
+  const [certBusy, setCertBusy] = useState(null);
+  // Certificate PDFs open in a new tab (fetched with the login token)
+  const openCertificate = async (fileKey) => {
+    setResumeError('');
+    setCertBusy(fileKey);
+    const tab = window.open('', '_blank');
+    try {
+      const blob = await api.studentCertificate(studentId, fileKey);
+      const url = URL.createObjectURL(blob);
+      if (tab) tab.location.href = url; else window.location.assign(url);
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) {
+      if (tab) tab.close();
+      setError(e.message);
+    } finally {
+      setCertBusy(null);
+    }
+  };
+
   const toggleShortlist = async (jobId) => {
     setBusyJob(jobId);
     try {
@@ -148,15 +167,21 @@ export default function StudentProfileView({ studentId, backLabel, onBack, onOpe
         </section>
 
         <section className="panel profile-card">
-          <div className="panel-heading"><div><b><Award size={15} /> Certifications</b><small>Credential links let you verify them.</small></div></div>
+          <div className="panel-heading"><div><b><Award size={15} /> Certifications</b><small>Each has a credential link or an uploaded certificate PDF.</small></div></div>
           {s.certifications.length === 0 && <p className="muted">No certifications added.</p>}
           <ul className="evidence-list">
             {s.certifications.map((c) => (
               <li key={c.name}>
                 <span>{c.name}</span>
-                {c.url
-                  ? <a href={c.url} target="_blank" rel="noopener noreferrer">Verify <ExternalLink size={11} /></a>
-                  : <small className="muted">No credential link</small>}
+                {c.url && <a href={c.url} target="_blank" rel="noopener noreferrer">View credential <ExternalLink size={11} /></a>}
+                {!c.url && c.file && (c.file.available
+                  ? (
+                    <button type="button" className="text-link" onClick={() => openCertificate(c.file.key)} disabled={certBusy === c.file.key}>
+                      {certBusy === c.file.key ? <Loader2 size={12} className="spin" /> : <FileText size={12} />} View certificate (PDF)
+                    </button>
+                  )
+                  : <small className="muted" title="Uploaded on another computer">PDF not on this server</small>)}
+                {!c.url && !c.file && <small className="muted">No proof added yet</small>}
               </li>
             ))}
           </ul>

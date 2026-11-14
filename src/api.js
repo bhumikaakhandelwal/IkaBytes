@@ -80,10 +80,18 @@ export const api = {
   listStudents: (params) => request(`/students${qs(params)}`),
   getStudent: (id) => request(`/students/${id}`),
   studentResume: (id) => requestFile(`/students/${id}/resume`),
+  studentCertificate: (id, fileKey) => requestFile(`/students/${id}/certificates/${encodeURIComponent(fileKey)}`),
 
   // Placement officer: skill-gap analytics
   skillGaps: (params) => request(`/analytics/skill-gaps${qs(params)}`),
   skillGapStudents: (key, params) => request(`/analytics/skill-gaps/${encodeURIComponent(key)}/students${qs(params)}`),
+
+  // Student: upload a certificate PDF; returns { fileKey, fileName } to attach on save
+  uploadCertificate: (file) => {
+    const form = new FormData();
+    form.append('certificate', file);
+    return request('/profile/me/certificates/file', { method: 'POST', form });
+  },
 
   getInsights: () => request('/profile/me/insights'),
   refreshInsights: () => request('/profile/me/insights/refresh', { method: 'POST' }),

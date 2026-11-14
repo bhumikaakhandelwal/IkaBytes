@@ -3,6 +3,7 @@ import {
   Loader2, TrendingUp, TrendingDown, Minus, Users, Download, ChevronDown, ChevronUp, Info, RefreshCw,
 } from 'lucide-react';
 import { api } from './api.js';
+import Select from './Select.jsx';
 
 function Tag({ children, tone = '' }) {
   return <span className={`tag ${tone}`}>{children}</span>;
@@ -96,10 +97,13 @@ export default function SkillGaps({ options, setOptions, onOpenStudent }) {
 
       <section className="panel gaps-panel">
         <div className="gaps-filters">
-          <select value={options.department} onChange={(e) => set({ department: e.target.value })}>
-            <option value="">All departments</option>
-            {(data?.departments || []).map((d) => <option key={d} value={d}>{d}</option>)}
-          </select>
+          <Select
+            className="filter-select"
+            value={options.department}
+            onChange={(v) => set({ department: v })}
+            ariaLabel="Department"
+            options={[{ value: '', label: 'All departments' }, ...(data?.departments || [])]}
+          />
           <div className="segmented" role="group" aria-label="Which students to count">
             <button type="button" className={options.scope === 'eligible' ? 'active' : ''} onClick={() => set({ scope: 'eligible' })}>
               Eligible students

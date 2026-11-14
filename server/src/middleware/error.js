@@ -7,9 +7,10 @@ export function notFound(req, res) {
 // eslint-disable-next-line no-unused-vars
 export function errorHandler(err, req, res, next) {
   if (err instanceof multer.MulterError) {
+    const isCertificate = err.field === 'certificate';
     const message = err.code === 'LIMIT_FILE_SIZE'
-      ? 'Resume must be 5 MB or smaller.'
-      : 'Upload a PDF, DOC, DOCX or TXT file.';
+      ? `${isCertificate ? 'Certificate' : 'Resume'} must be 5 MB or smaller.`
+      : isCertificate ? 'Certificates must be uploaded as PDF files.' : 'Upload a PDF, DOC, DOCX or TXT file.';
     return res.status(400).json({ error: message });
   }
   if (err.name === 'ValidationError') {

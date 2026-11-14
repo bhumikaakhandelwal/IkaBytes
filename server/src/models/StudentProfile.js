@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { skillKey } from '../services/skills.js';
+import { proofsFor } from '../services/certificates.js';
 
 const studentProfileSchema = new mongoose.Schema(
   {
@@ -13,7 +14,11 @@ const studentProfileSchema = new mongoose.Schema(
     linkedin: { type: String, trim: true, default: '' },
     skills: { type: [String], default: [] },
     certifications: { type: [String], default: [] },
-    // Optional verification links for certifications, matched by name
+    // Proof for each certification (matched by name): a credential link OR an uploaded PDF
+    certificationProofs: [{
+      _id: false, name: String, url: String, fileKey: String, fileName: String, uploadedAt: Date,
+    }],
+    // Older field (links only) — still read so existing data keeps working
     certificationLinks: [{ _id: false, name: String, url: String }],
     projects: { type: [String], default: [] },
     resume: {
@@ -77,7 +82,7 @@ studentProfileSchema.methods.toPublic = function toPublic() {
     linkedin: this.linkedin,
     skills: this.skills,
     certifications: this.certifications,
-    certificationLinks: this.certificationLinks || [],
+    certificationProofs: proofsFor(this).map(({ uploadedAt, ...p }) => p),
     projects: this.projects,
     extractedSkills: this.extractedSkills,
     resume: this.resume?.originalName

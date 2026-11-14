@@ -8,6 +8,7 @@
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "seed": "node src/seed.js",
+    "seed:more": "node src/seedMore.js",
     "test:ai": "node src/scripts/testGroq.js"
   },
   "engines": {

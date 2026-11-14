@@ -140,7 +140,7 @@ IkaBytes/
 ### Prerequisites
 - **Node.js**: v18.0.0 or higher
 - **MongoDB**: Local MongoDB instance (`mongodb://127.0.0.1:27017/skillmatch`) or a MongoDB Atlas connection string
-- **Groq API Key** *(optional, for AI insights)*: [Get a free key from Groq Console](https://console.groq.com/keys)
+- **Groq API Key** *(for AI insights)*: [Get a free key from Groq Console](https://console.groq.com/keys)
 
 ---
 

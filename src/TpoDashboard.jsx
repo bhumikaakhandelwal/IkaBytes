@@ -33,7 +33,10 @@ export function OfficerView({ jobs, reloadJobs, onSelectJob, onOpenStudent }) {
   const [search, setSearch] = useState('');
   const [notice, setNotice] = useState('');
   const [posting, setPosting] = useState(false);
-  const [collapsedJobs, setCollapsedJobs] = useState({});
+  // The post form folds away so the role tiles get the full width
+  const [showForm, setShowForm] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [success, setSuccess] = useState('');
   // Top-3 candidates per job, computed by the backend from real student profiles
   const [shortlists, setShortlists] = useState(null);
   const [totalStudents, setTotalStudents] = useState(0);
@@ -49,6 +52,8 @@ export function OfficerView({ jobs, reloadJobs, onSelectJob, onOpenStudent }) {
   }, []);
 
   useEffect(() => { loadShortlists(); }, [loadShortlists, jobs]);
+  // No roles yet → show the form straight away
+  useEffect(() => { if (jobs.length === 0) setShowForm(true); }, [jobs.length]);
   // Rankings change when students update profiles or upload resumes, so refresh them live too
   usePolling(loadShortlists, 10000);
 
@@ -103,7 +108,10 @@ export function OfficerView({ jobs, reloadJobs, onSelectJob, onOpenStudent }) {
       setCgpaError('');
       setDescription('');
       setSkills('');
-      setNotice('Role added to the live shortlist.');
+      setNotice('');
+      setShowForm(false);
+      setSuccess(`"${title.trim()}" at ${company.trim()} was posted.`);
+      setTimeout(() => setSuccess(''), 5000);
       await reloadJobs();
     } catch (err) {
       setNotice(err.message || 'Could not post the role.');
@@ -112,7 +120,9 @@ export function OfficerView({ jobs, reloadJobs, onSelectJob, onOpenStudent }) {
     }
   };
 
-  const visible = jobs.filter(j => `${j.title} ${j.company} ${j.department || ''}`.toLowerCase().includes(search.toLowerCase()));
+  const visible = jobs
+    .filter(j => statusFilter === 'all' || (statusFilter === 'closed' ? j.status === 'Closed' : j.status !== 'Closed'))
+    .filter(j => `${j.title} ${j.company} ${j.department || ''} ${j.skills.join(' ')}`.toLowerCase().includes(search.toLowerCase()));
   const openCount = jobs.filter(j => j.status !== 'Closed').length;
 
   return (
@@ -128,153 +138,166 @@ export function OfficerView({ jobs, reloadJobs, onSelectJob, onOpenStudent }) {
         </Tag>
       </div>
 
-      <div className="officer-grid">
-        <section className="panel post-panel">
-          <div className="panel-heading">
-            <div className="post-icon"><Plus size={20} /></div>
-            <div>
-              <b>Post a new role</b>
-              <small>Requirements become searchable instantly.</small>
-            </div>
-          </div>
-          <form className="post-form" onSubmit={post}>
-            <input
-              placeholder="Role title · e.g. Frontend Engineer"
-              value={title}
-              onChange={e => { setTitle(e.target.value); setNotice(''); }}
-              required
-            />
-            <input
-              placeholder="Company name"
-              value={company}
-              onChange={e => { setCompany(e.target.value); setNotice(''); }}
-              required
-            />
-            <Select
-              value={department}
-              onChange={(v) => { setDepartment(v); setNotice(''); }}
-              placeholder="Select eligible department"
-              ariaLabel="Eligible department"
-              invalid={notice === DEPT_REQUIRED}
-              options={[
-                { value: ALL_DEPARTMENTS, label: 'All Departments (Open to All)' },
-                ...DEPARTMENTS,
-              ]}
-            />
-            <div>
+      <section className={`panel post-panel post-panel-wide ${showForm ? 'is-open' : ''}`}>
+        <button type="button" className="post-toggle" onClick={() => setShowForm(v => !v)} aria-expanded={showForm}>
+          <span className="post-icon"><Plus size={20} /></span>
+          <span>
+            <b>Post a new role</b>
+            <small>{showForm ? 'Requirements become searchable instantly.' : 'Click to add a role with its required skills, department and CGPA cutoff.'}</small>
+          </span>
+          <ChevronDown size={20} className={showForm ? 'chevron-expanded' : 'chevron-collapsed'} />
+        </button>
+        {showForm && (
+            <form className="post-form post-form-grid" onSubmit={post}>
               <input
-                type="number"
-                className={cgpaError ? 'has-error' : ''}
-                placeholder="CGPA cutoff (out of 10) · e.g. 7.5"
-                min="0"
-                max="10"
-                step="0.01"
-                value={cgpaCutoff}
-                onChange={handleCgpaCutoffChange}
-                onKeyDown={e => {
-                  if (['e', 'E', '+', '-'].includes(e.key)) e.preventDefault();
-                }}
+                placeholder="Role title · e.g. Frontend Engineer"
+                value={title}
+                onChange={e => { setTitle(e.target.value); setNotice(''); }}
+                required
               />
-              {cgpaError && <small className="field-error">{cgpaError}</small>}
-            </div>
-            <textarea
-              placeholder="Describe the opportunity and team..."
-              value={description}
-              onChange={e => { setDescription(e.target.value); setNotice(''); }}
-              rows="4"
-            />
-            <input
-              placeholder="Required skills, comma separated"
-              value={skills}
-              onChange={e => { setSkills(e.target.value); setNotice(''); }}
-              required
-            />
-            <button className="primary-btn full" type="submit" disabled={posting}>
-              {posting ? 'Posting…' : 'Post role'} <ArrowRight size={16} />
-            </button>
-            {notice && <p className={notice.startsWith('Role') ? 'inline-success' : 'form-error'}>{notice}</p>}
-          </form>
-        </section>
+              <input
+                placeholder="Company name"
+                value={company}
+                onChange={e => { setCompany(e.target.value); setNotice(''); }}
+                required
+              />
+              <Select
+                value={department}
+                onChange={(v) => { setDepartment(v); setNotice(''); }}
+                placeholder="Select eligible department"
+                ariaLabel="Eligible department"
+                invalid={notice === DEPT_REQUIRED}
+                options={[
+                  { value: ALL_DEPARTMENTS, label: 'All Departments (Open to All)' },
+                  ...DEPARTMENTS,
+                ]}
+              />
+              <div>
+                <input
+                  type="number"
+                  className={cgpaError ? 'has-error' : ''}
+                  placeholder="CGPA cutoff (out of 10) · e.g. 7.5"
+                  min="0"
+                  max="10"
+                  step="0.01"
+                  value={cgpaCutoff}
+                  onChange={handleCgpaCutoffChange}
+                  onKeyDown={e => {
+                    if (['e', 'E', '+', '-'].includes(e.key)) e.preventDefault();
+                  }}
+                />
+                {cgpaError && <small className="field-error">{cgpaError}</small>}
+              </div>
+              <textarea
+                className="span-2"
+                placeholder="Describe the opportunity and team..."
+                value={description}
+                onChange={e => { setDescription(e.target.value); setNotice(''); }}
+                rows="4"
+              />
+              <input
+                className="span-2"
+                placeholder="Required skills, comma separated"
+                value={skills}
+                onChange={e => { setSkills(e.target.value); setNotice(''); }}
+                required
+              />
+              <button className="primary-btn full span-2" type="submit" disabled={posting}>
+                {posting ? 'Posting…' : 'Post role'} <ArrowRight size={16} />
+              </button>
+              {notice && <p className="form-error span-2">{notice}</p>}
+            </form>
+        )}
+      </section>
 
-        <section className="shortlists">
-          <div className="section-heading compact">
-            <div>
-              <h2>Live shortlists</h2>
-              <p className="muted">Student profiles ranked against each job brief.</p>
-            </div>
-            <span className="ai-label"><span className="live-dot" /> Live · updates automatically</span>
+      <section className="shortlists">
+        <div className="section-heading compact">
+          <div>
+            <h2>Live shortlists</h2>
+            <p className="muted">Student profiles ranked against each job brief.</p>
           </div>
+          <span className="ai-label"><span className="live-dot" /> Live · updates automatically</span>
+        </div>
 
+        <div className="roles-toolbar">
+          <div className="job-status-filter">
+            <button type="button" className={`status-filter-btn ${statusFilter === 'all' ? 'active' : ''}`} onClick={() => setStatusFilter('all')}>
+              All Roles ({jobs.length})
+            </button>
+            <button type="button" className={`status-filter-btn ${statusFilter === 'open' ? 'active' : ''}`} onClick={() => setStatusFilter('open')}>
+              Open ({openCount})
+            </button>
+            <button type="button" className={`status-filter-btn ${statusFilter === 'closed' ? 'active' : ''}`} onClick={() => setStatusFilter('closed')}>
+              Closed / Filled ({jobs.length - openCount})
+            </button>
+          </div>
           <div className="search-box shortlist-search">
             <Search size={15} />
-            <input placeholder="Search posted roles" value={search} onChange={e => setSearch(e.target.value)} />
+            <input placeholder="Search roles, skills or department" value={search} onChange={e => setSearch(e.target.value)} />
           </div>
+        </div>
 
-          {jobs.length === 0 && <div className="empty-state">No roles posted yet. Use the form to post your first role.</div>}
-          {jobs.length > 0 && visible.length === 0 && <div className="empty-state">No roles match that search.</div>}
+        {success && <p className="inline-success roles-success"><Check size={14} /> {success}</p>}
+        {jobs.length === 0 && <div className="empty-state">No roles posted yet. Use the form above to post your first role.</div>}
+        {jobs.length > 0 && visible.length === 0 && <div className="empty-state">No roles match these filters.</div>}
 
+        <div className="role-grid">
           {visible.map(job => {
             const isClosed = job.status === 'Closed';
             const top = shortlists?.[job.id] || [];
             return (
-              <article className={`shortlist-card ${isClosed ? 'is-closed' : ''}`} key={job.id}>
-                <button
-                  className="shortlist-open"
-                  onClick={() => setCollapsedJobs(current => ({ ...current, [job.id]: !current[job.id] }))}
-                >
-                  <span>
-                    <b>{job.title}</b>
-                    <Tag tone={isClosed ? 'danger' : 'success'}>{isClosed ? 'CLOSED' : 'OPEN'}</Tag>
-                    <small>
-                      {job.company} · {job.skills.join(' · ')}
-                      {job.shortlistedCount ? ` · ${job.shortlistedCount} shortlisted` : ''}
-                    </small>
-                  </span>
-                  <ChevronDown
-                    size={20}
-                    className={collapsedJobs[job.id] ? 'chevron-collapsed' : 'chevron-expanded'}
-                  />
-                </button>
-                {!collapsedJobs[job.id] && (
-                  <div className="shortlist-preview">
-                    <div className="preview-label">
-                      <Sparkles size={13} /> Top matches
-                    </div>
-                    {shortlists === null && <Loading label="Ranking students…" />}
-                    {shortlists !== null && top.length === 0 && (
-                      <p className="muted" style={{ fontSize: '11px', margin: '6px 0' }}>
-                        No student profiles list these skills yet.
-                      </p>
-                    )}
-                    {top.map(s => (
-                      <div className="candidate-mini" key={s.id}>
-                        <span className="rank">{s.rank}</span>
-                        <div className="candidate-info">
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <button type="button" className="name-link" onClick={() => onOpenStudent?.(s.id, 'roles & shortlists')} title="Open full profile">
-                              {s.name}
-                            </button>
-                            {s.shortlisted && (
-                              <span className="mini-shortlist-badge">
-                                <Check size={10} /> Shortlisted
-                              </span>
-                            )}
-                          </div>
-                          <small>{s.status} · {s.evidence}</small>
-                        </div>
-                        <strong>{s.score}%</strong>
-                      </div>
-                    ))}
-                    <button className="view-all" onClick={() => onSelectJob(job)}>
-                      View full shortlist & candidate ranking <ArrowRight size={14} />
-                    </button>
+              <article className={`job-card role-tile ${isClosed ? 'is-closed' : ''}`} key={job.id}>
+                <div className="role-tile-head">
+                  <h3>{job.title}</h3>
+                  <Tag tone={isClosed ? 'danger' : 'success'}>{isClosed ? 'CLOSED' : 'OPEN'}</Tag>
+                </div>
+                <p className="role-tile-meta">
+                  {job.company}
+                  {job.department ? ` · ${job.department}` : ''}
+                  {job.cgpaCutoff ? ` · Min CGPA ${job.cgpaCutoff}` : ''}
+                </p>
+                <div className="tags">
+                  {job.skills.map(skill => <Tag key={skill}>{skill}</Tag>)}
+                </div>
+
+                <div className="role-tile-matches">
+                  <div className="preview-label">
+                    <Sparkles size={13} /> Top matches
+                    {job.shortlistedCount > 0 && <span>{job.shortlistedCount} SHORTLISTED</span>}
                   </div>
-                )}
+                  {shortlists === null && <Loading label="Ranking students…" />}
+                  {shortlists !== null && top.length === 0 && (
+                    <p className="muted role-tile-empty">No student profiles list these skills yet.</p>
+                  )}
+                  {top.map(s => (
+                    <div className="candidate-mini" key={s.id}>
+                      <span className="rank">{s.rank}</span>
+                      <div className="candidate-info">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          <button type="button" className="name-link" onClick={() => onOpenStudent?.(s.id, 'roles & shortlists')} title="Open full profile">
+                            {s.name}
+                          </button>
+                          {s.shortlisted && (
+                            <span className="mini-shortlist-badge">
+                              <Check size={10} /> Shortlisted
+                            </span>
+                          )}
+                        </div>
+                        <small>{s.status} · {s.evidence}</small>
+                      </div>
+                      <strong>{s.score}%</strong>
+                    </div>
+                  ))}
+                </div>
+
+                <button type="button" className="outline-btn role-tile-cta" onClick={() => onSelectJob(job)}>
+                  View full shortlist <ArrowRight size={14} />
+                </button>
               </article>
             );
           })}
-        </section>
-      </div>
+        </div>
+      </section>
     </div>
   );
 }

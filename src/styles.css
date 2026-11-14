@@ -2960,3 +2960,45 @@ button:disabled {
 .trend-down { background: #efe5f3; color: #78568a; }
 .trend-flat { background: #f5f0f7; color: #8f7b98; }
 .gaps-totals .missing-note { color: #8f6aa3; }
+
+/* =====================================================================
+   TPO Roles & shortlists: full-width post form + role tiles
+   ===================================================================== */
+.post-panel-wide { padding: 0; margin-bottom: 26px; }
+.post-toggle { width: 100%; display: flex; align-items: center; gap: 14px; border: 0; background: none; padding: 18px 22px; text-align: left; color: var(--ink); border-radius: 16px; }
+.post-toggle:hover { background: #fdfaff; }
+.post-toggle b { display: block; font-size: 16px; }
+.post-toggle small { display: block; font-size: 13px; color: var(--muted); margin-top: 3px; }
+.post-toggle > svg:last-child { margin-left: auto; color: var(--purple); flex: none; transition: transform .2s ease; }
+.post-toggle .chevron-expanded { transform: rotate(180deg); }
+.post-toggle .chevron-collapsed { transform: none; }
+.post-form.post-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 4px 22px 22px; }
+.post-form-grid .span-2 { grid-column: 1 / -1; }
+
+.roles-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+.roles-toolbar .job-status-filter { margin: 0; }
+.roles-toolbar .shortlist-search { margin: 0; width: 340px; max-width: 100%; }
+.roles-success { display: flex; align-items: center; gap: 6px; font-size: 14px; margin: 0 0 14px; }
+
+.role-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 16px; }
+.role-tile { display: flex; flex-direction: column; }
+.role-tile-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.role-tile-head h3 { margin: 0; }
+.role-tile-head .tag { flex: none; }
+.role-tile-meta { margin-top: 5px !important; }
+.role-tile .tags { margin: 12px 0; }
+.role-tile-matches { border-top: 1px solid #f0e8f2; padding-top: 12px; flex: 1; }
+.role-tile-matches .preview-label { margin-bottom: 4px; }
+.role-tile-matches .preview-label span { margin-left: auto; color: #39805c; }
+.role-tile-matches .candidate-mini:first-of-type { border-top: 0; }
+.role-tile-empty { font-size: 13px; margin: 6px 0 0; }
+.role-tile-cta { margin-top: 14px; }
+
+@media (max-width: 760px) {
+  .post-form.post-form-grid { grid-template-columns: 1fr; }
+  .post-form-grid .span-2 { grid-column: auto; }
+  .role-grid { grid-template-columns: 1fr; }
+  .roles-toolbar .shortlist-search { width: 100%; }
+}
+.post-form-grid .primary-btn { justify-self: end; width: auto; min-width: 200px; padding: 13px 26px; }
+@media (max-width: 760px) { .post-form-grid .primary-btn { justify-self: stretch; width: 100%; } }

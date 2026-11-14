@@ -1,6 +1,6 @@
 # IkaBytes — SkillMatch: AI Placement Accelerator & Skills Intelligence
 
-A full-stack placement intelligence platform connecting students with corporate recruiters and Training & Placement Officers (TPO). SkillMatch uses automated resume parsing, skill matching algorithms, and LLM-powered insights to match candidates to job openings, identify skill gaps, and streamline campus placements.
+A full-stack placement intelligence platform connecting students with corporate recruiters and Training & Placement Officers (TPO). SkillMatch uses automated resume parsing, multi-factor skill matching algorithms, and LLM-powered insights to match candidates to job openings, identify departmental skill gaps, manage verified credentials, and streamline campus placements.
 
 ---
 
@@ -18,8 +18,8 @@ A full-stack placement intelligence platform connecting students with corporate 
 - **Server Framework**: Express 4 (`express`)
 - **Database & ODM**: MongoDB with Mongoose 8 (`mongoose`)
 - **Authentication**: JSON Web Tokens (`jsonwebtoken`) & `bcryptjs` password hashing
-- **File Uploads**: Multer (`multer`) for multipart resume ingestion
-- **Resume Text Extraction**:
+- **File Uploads**: Multer (`multer`) for multipart resume & certificate document ingestion
+- **Resume & Document Processing**:
   - `pdf-parse`: PDF document parsing
   - `mammoth`: DOCX/DOC document text extraction
   - Native `node:fs/promises`: Plain text resume parsing
@@ -30,9 +30,10 @@ A full-stack placement intelligence platform connecting students with corporate 
 
 ## ✨ Features
 
-### 1. Student Dashboard (`src/StudentDashboard.jsx`)
+### 1. Student Workspace (`src/StudentDashboard.jsx`)
 - **Profile Management**: Persists full name, academic CGPA (0–10 scale validation), department selection, LinkedIn URL, and dynamic project links directly to MongoDB.
-- **Resume Parsing & Skill Extraction**: Supports PDF, DOCX, and TXT resumes (up to 5 MB); parses text and automatically identifies known technical skills.
+- **Resume Upload & Automated Skill Extraction**: Supports PDF, DOCX, and TXT resumes (up to 5 MB); parses text and automatically identifies known technical skills with high-precision matching (e.g. contextual detection for single-letter languages like C and R).
+- **Certifications Manager (`src/CertificationsEditor.jsx`)**: Add, view, and verify credentials with certificate title, issuing organization, issue date, credential URL, and certificate document uploads (PDF/Images).
 - **Market Pulse**: Real-time visualization of the most in-demand skills required across all open job postings.
 - **Opportunities Explorer**: Search jobs by title, company, skills, or department, with quick status filters (**All**, **Open**, and **Closed/Filled**).
 
@@ -44,13 +45,57 @@ A full-stack placement intelligence platform connecting students with corporate 
 - **Role Status Management**: Reopen or close filled positions at any time.
 - **Export & Reporting**: Print or export candidate leaderboards directly from the browser.
 
-### 3. AI-Powered Career Insights (`server/src/services/insights.js`)
+### 3. Student Directory & Profile Inspection (`src/StudentsSection.jsx`, `src/StudentProfileView.jsx`)
+- **Directory Search & Filters**: Search across the student database by name, department, minimum CGPA, specific technical skills, and resume availability.
+- **Comprehensive Candidate Profile View**: Inspect any student's complete profile, including projects, certifications, verified skills, and role-fit scores across all open jobs.
+- **In-Browser Resume Viewer**: Direct streaming and inspection of uploaded resume files.
+
+### 4. Departmental Skill Gaps Analytics (`src/SkillGaps.jsx`)
+- Compares aggregate industry skills required by recruiters against actual skills possessed by students in each department.
+- Identifies critical missing skills and curriculum gaps.
+- Filter by department, export gap analysis, and view the list of students who need targeted training in a given skill.
+
+### 5. AI-Powered Career Insights (`server/src/services/insights.js`)
 - Compares student resumes against active job briefs via Groq LLM.
 - Generates tailored strengths, skill gaps, actionable suggestions, and job fit explanations.
 - Features in-memory fingerprint caching and debouncing to prevent redundant API calls.
 
-### 4. Independent Per-Tab Sessions
+### 6. Independent Per-Tab Sessions
 - Utilizes `sessionStorage` token management so that different browser tabs can operate as different accounts/roles simultaneously (e.g., Student in Tab 1, TPO in Tab 2) without session bleed.
+
+---
+
+## 📁 Project Structure
+
+```
+IkaBytes/
+├── src/
+│   ├── App.jsx                  # Root application shell & auth routing
+│   ├── StudentDashboard.jsx     # Student workspace & profile management
+│   ├── TpoDashboard.jsx         # Placement Officer dashboard & job management
+│   ├── StudentsSection.jsx      # TPO Student directory with multi-filter search
+│   ├── StudentProfileView.jsx   # Detailed student profile & resume modal
+│   ├── SkillGaps.jsx            # Departmental skill gap analytics & reports
+│   ├── CertificationsEditor.jsx # Student certifications manager
+│   ├── Select.jsx               # Custom styled dropdown select component
+│   ├── departments.js           # Standardized department definitions
+│   ├── api.js                   # Client API & sessionStorage tokenStore
+│   ├── styles.css               # Modern responsive CSS design system
+│   └── main.jsx                 # React root entry point
+├── server/
+│   ├── src/
+│   │   ├── server.js            # Express server initialization & MongoDB connection
+│   │   ├── seed.js              # Database seeder with demo accounts & jobs
+│   │   ├── models/              # Mongoose schemas (User, StudentProfile, JobPosting, Application)
+│   │   ├── routes/              # Express API routers (auth, profile, jobs, students, analytics)
+│   │   ├── services/            # Matching engine, resume parsing, Groq AI insights, skill normalization
+│   │   └── middleware/          # JWT auth & Multer upload middleware
+│   ├── .env.example             # Server environment variables template
+│   └── package.json             # Server dependencies & scripts
+├── package.json                 # Frontend dependencies & scripts
+├── vite.config.js               # Vite config with API proxy to port 5000
+└── README.md                    # Project documentation
+```
 
 ---
 
@@ -127,7 +172,8 @@ cd IkaBytes
    JWT_SECRET=your-secure-random-jwt-secret-key-2026
    JWT_EXPIRES_IN=7d
    CLIENT_ORIGIN=http://localhost:5173
-   
+
+   # Optional: AI Career Insights via Groq
    GROQ_API_KEY=gsk_your_groq_api_key_here
    GROQ_MODEL=openai/gpt-oss-120b
    GROQ_BASE_URL=https://api.groq.com/openai/v1
@@ -178,12 +224,13 @@ cd IkaBytes
 ### 2. Testing Multi-Role Independent Sessions
 1. Open `http://localhost:5173` in **Tab 1**:
    - Sign in as a **Student** (e.g. `aarav@college.edu` / `password123` or register a new student account).
-   - Update your profile (CGPA, department, LinkedIn, project links), upload a resume (PDF/DOCX/TXT), and observe the detected skills and market pulse.
+   - Update your profile (CGPA, department, LinkedIn, project links), upload a resume (PDF/DOCX/TXT), add certifications, and observe the detected skills and market pulse.
 2. Open `http://localhost:5173` in **Tab 2** (a separate tab):
    - Sign in as a **Placement Officer** (e.g. `officer@college.edu` / `password123`).
    - Post a new role with required skills and CGPA cutoffs.
-   - Click **"View full shortlist & candidate ranking"** to inspect the Leaderboard.
-   - Toggle candidate shortlists and reopen/close the role.
+   - Inspect the **Student Directory**, filter candidates by department and skills, and view individual student profiles.
+   - Explore **Skill Gaps** analytics to see departmental demand vs. student skill supply.
+   - Check **Live Shortlists** and click **"View full shortlist & candidate ranking"** for the Leaderboard.
 3. Refresh both tabs: each tab preserves its distinct user role and data without session crossover.
 
 ---
@@ -211,13 +258,15 @@ All protected endpoints require the header `Authorization: Bearer <token>`.
 | `POST` | `/api/auth/login` | Public | User login: `{ email, password, role? }` |
 | `GET` | `/api/auth/me` | Authenticated | Retrieve current user profile |
 
-### Student Profile & Resume
+### Student Profile, Resume & Certifications
 | Method | Path | Access | Description |
 |---|---|---|---|
 | `GET` | `/api/profile/me` | Student | Get authenticated student's profile & parsed skills |
 | `PUT` | `/api/profile/me` | Student | Update profile (`name`, `department`, `cgpa`, `linkedin`, `projects`) |
 | `POST` | `/api/profile/me/resume` | Student | Upload resume multipart form (`.pdf`, `.docx`, `.doc`, `.txt`) |
 | `GET` | `/api/profile/:userId/resume` | Owner / TPO | Download / stream resume document |
+| `POST` | `/api/profile/me/certificates` | Student | Upload certificate multipart document & metadata |
+| `DELETE`| `/api/profile/me/certificates/:id`| Student | Remove a certificate |
 
 ### Jobs & Leaderboards
 | Method | Path | Access | Description |
@@ -228,6 +277,15 @@ All protected endpoints require the header `Authorization: Bearer <token>`.
 | `DELETE`| `/api/jobs/:id` | TPO | Remove a job posting |
 | `GET` | `/api/jobs/shortlists` | TPO | Top candidate matches across all open jobs |
 | `GET` | `/api/jobs/:id/leaderboard` | Authenticated | Candidate leaderboard ranked by skill match score |
+
+### Student Directory & Skill Gaps Analytics (TPO Only)
+| Method | Path | Access | Description |
+|---|---|---|---|
+| `GET` | `/api/students` | TPO | Directory query (`?q=&department=&minCgpa=&skill=&hasResume=1&sort=name\|cgpa\|updated&page=1`) |
+| `GET` | `/api/students/:id` | TPO | Full student profile with role-fit breakdown across open jobs |
+| `GET` | `/api/students/:id/resume` | TPO | Stream / download candidate resume document |
+| `GET` | `/api/analytics/skill-gaps` | TPO | Skill gap analysis (`?department=&scope=eligible\|all&includeClosed=1`) |
+| `GET` | `/api/analytics/skill-gaps/:skill/students` | TPO | Students lacking a particular required skill |
 
 ### Market & Applications
 | Method | Path | Access | Description |
